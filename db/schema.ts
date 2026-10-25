@@ -186,3 +186,27 @@ export const emailEvents = pgTable(
     index('email_events_status_created').on(t.status, t.createdAt),
   ],
 )
+
+
+export const verificationChallenges = pgTable(
+  'verification_challenges',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    fullName: text('full_name').notNull(),
+    codeHash: text('code_hash').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('verification_challenges_email_created').on(t.email, t.createdAt),
+    index('verification_challenges_status_expires').on(t.status, t.expiresAt),
+    check('verification_attempts_valid', sql`${t.attempts} >= 0 AND ${t.attempts} <= 5`),
+    check('verification_status_valid', sql`${t.status} in ('pending','sent','failed','consumed','expired','locked','superseded')`),
+  ],
+)
