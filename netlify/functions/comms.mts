@@ -1,12 +1,13 @@
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
+import { ZodError } from 'zod'
 import { database } from '../../db/index.js'
 import {
   conversations, conversationMembers, messages, profiles, jobs, proposals, uploads,
 } from '../../db/schema.js'
 import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transactional-email.mjs'
-import { conversationInputSchema, messageInputSchema } from '../../src/lib/comms-validation.js'
+import { conversationInputSchema, messageInputSchema, uuidSchema } from '../../src/lib/comms-validation.js'
 
 
 function json(body: unknown, status = 200) {
@@ -115,7 +116,7 @@ export default async (req: Request) => {
     }
 
     if (parts.length === 3 && parts[0] === 'conversations' && parts[2] === 'messages') {
-      const conversationId = conversationInputSchema.shape.jobId.parse(parts[1])
+      const conversationId = uuidSchema.parse(parts[1])
       const [membership] = await db.select({ id: conversationMembers.id })
         .from(conversationMembers).where(and(
           eq(conversationMembers.conversationId, conversationId),
@@ -186,7 +187,7 @@ export default async (req: Request) => {
 
     return json({ error: 'Endpoint not found.' }, 404)
   } catch (error) {
-    if (error instanceof Error && error.name === 'ZodError') return json({ error: ('issues' in error && Array.isArray(error.issues) ? error.issues.map((i: { message: string }) => i.message).join(' ') : 'Invalid input.') }, 422)
+    if (error instanceof ZodError) return json({ error: error.issues.map((i) => i.message).join(' ') }, 422)
     if (error instanceof SyntaxError) return json({ error: 'Invalid JSON.' }, 400)
     return json({ error: error instanceof Error ? error.message : 'Messaging is temporarily unavailable.' }, 503)
   }
