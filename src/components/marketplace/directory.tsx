@@ -9,14 +9,19 @@ export function Directory({ services = false }: { services?: boolean }) {
     [category, setCategory] = useState(''),
     [search, setSearch] = useState('')
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search)
-    const q = p.get('q') || '',
-      c = p.get('category') || ''
-    setQuery(q)
-    setCategory(c)
-    setSearch(
-      'q=' + encodeURIComponent(q) + '&category=' + encodeURIComponent(c),
-    )
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      const p = new URLSearchParams(window.location.search)
+      const q = p.get('q') || ''
+      const c = p.get('category') || ''
+      setQuery(q)
+      setCategory(c)
+      setSearch('q=' + encodeURIComponent(q) + '&category=' + encodeURIComponent(c))
+    })
+    return () => {
+      active = false
+    }
   }, [])
   const result = useApi<Profile[]>('profiles?' + search)
   return (
