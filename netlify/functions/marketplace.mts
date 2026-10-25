@@ -137,8 +137,9 @@ export default async (req: Request) => {
       }
       if (resource === 'jobs' && id) {
         idSchema.parse(id)
+        let proposalNotification: { email: string | null; jobTitle: string; jobId: string; proposalId: string } | null = null
         // Serialize proposals and closing against the same job row.
-        return await db.transaction(async (tx) => {
+        const response = await db.transaction(async (tx) => {
           const [job] = await tx
             .select()
             .from(jobs)
@@ -180,6 +181,9 @@ export default async (req: Request) => {
                 action: 'proposal.submitted',
                 recordId: proposal.id,
               })
+            const [ownerProfile] = await tx.select({ email: profiles.email })
+              .from(profiles).where(eq(profiles.id, job.ownerId)).limit(1)
+            proposalNotification = { email: ownerProfile?.email || null, jobTitle: job.title, jobId: job.id, proposalId: proposal.id }
             return json(proposal, 201)
           }
           if (!child && req.method === 'PATCH') {
@@ -200,6 +204,17 @@ export default async (req: Request) => {
           }
           return json({ error: 'Operation not found.' }, 404)
         })
+        if (proposalNotification?.email && response.status === 201) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          await sendTransactionalEmail({
+            to: proposalNotification.email,
+            subject: 'A new proposal was submitted on Qamivo',
+            html: brandedNoticeHtml('New proposal received', `A freelancer submitted a proposal for: ${proposalNotification.jobTitle}`, `${base}/jobs/${proposalNotification.jobId}`),
+            eventType: 'proposal.submitted',
+            idempotencyKey: `proposal-submitted/${proposalNotification.proposalId}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
+        return response
       }
       if (resource === 'proposals' && id && req.method === 'PATCH') {
         idSchema.parse(id)
