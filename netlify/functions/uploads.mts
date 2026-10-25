@@ -5,25 +5,17 @@ import { and, arrayContains, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { database } from '../../db/index.js'
 import { uploads, profiles, messages, conversationMembers, jobs, proposals } from '../../db/schema.js'
+import { MAX_IMAGE_UPLOAD_BYTES, validateImageUpload } from '../../src/lib/image-validation.js'
 
 const purposes = new Set([
   'avatar', 'company_logo', 'portfolio', 'job_reference',
   'message_attachment', 'support_attachment', 'course_image', 'ad_creative',
 ])
-const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-const MAX_BYTES = 5 * 1024 * 1024
 function uploadStore() { return getStore(process.env.CONTEXT === 'production' ? 'qamivo-user-uploads' : 'qamivo-preview-user-uploads') }
 const uuid = z.string().uuid()
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
-}
-function detectImage(bytes: Uint8Array): string | null {
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png'
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
-  if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).match(/^GIF8[79]a$/)) return 'image/gif'
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp'
-  return null
 }
 function sameOrigin(req: Request, url: URL) {
   return req.headers.get('origin') === url.origin
@@ -63,11 +55,19 @@ export default async (req: Request) => {
       const isPublic = String(form.get('isPublic') || 'false') === 'true'
       if (!(file instanceof File)) return json({ error: 'Choose an image file first.' }, 422)
       if (!purposes.has(purpose)) return json({ error: 'Unsupported upload purpose.' }, 422)
-      if (file.size < 1 || file.size > MAX_BYTES) return json({ error: 'Images must be 1 byte to 5 MB.' }, 413)
+      if (file.size < 1 || file.size > MAX_IMAGE_UPLOAD_BYTES) return json({ error: 'Images must be 1 byte to 5 MB.' }, 413)
       if (isPublic && !['company_logo', 'portfolio'].includes(purpose)) return json({ error: 'Only portfolio images and company logos can be explicitly public.' }, 422)
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const detected = detectImage(bytes)
-      if (!detected || !allowedTypes.has(detected) || (file.type && file.type !== detected)) return json({ error: 'Use a valid JPEG, PNG, WebP or GIF image. SVG and other file types are not accepted.' }, 415)
+      const validation = validateImageUpload(bytes, file.type, file.size)
+      if (!validation.ok) {
+        const message = validation.reason === 'too_large'
+          ? 'Images must be 5 MB or smaller.'
+          : validation.reason === 'content_type_mismatch'
+            ? 'The file content does not match its declared image type.'
+            : 'Use a valid JPEG, PNG, WebP or GIF image. SVG and other file types are not accepted.'
+        return json({ error: message }, validation.reason === 'too_large' ? 413 : 415)
+      }
+      const detected = validation.contentType
 
       const id = crypto.randomUUID()
       const storeKey = `${user.id}/${id}`
