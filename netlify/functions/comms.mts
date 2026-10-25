@@ -1,25 +1,13 @@
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
-import { z } from 'zod'
 import { database } from '../../db/index.js'
 import {
   conversations, conversationMembers, messages, profiles, jobs, proposals, uploads,
 } from '../../db/schema.js'
 import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transactional-email.mjs'
+import { conversationInputSchema, messageInputSchema } from '../../src/lib/comms-validation.js'
 
-const uuid = z.string().uuid()
-const conversationInput = z.object({
-  recipientUsername: z.string().trim().toLowerCase().min(3).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
-  jobId: uuid,
-  subject: z.string().trim().min(3).max(120).default('Project conversation'),
-})
-const messageInput = z.object({
-  body: z.string().trim().max(4000).default(''),
-  attachmentId: uuid.optional(),
-}).refine((v) => v.body.length > 0 || !!v.attachmentId, {
-  message: 'Write a message or attach an image.',
-})
 
 function json(body: unknown, status = 200) {
   return Response.json(body, {
@@ -79,7 +67,7 @@ export default async (req: Request) => {
     }
 
     if (parts.length === 1 && parts[0] === 'conversations' && req.method === 'POST') {
-      const input = conversationInput.parse(await parseJson(req))
+      const input = conversationInputSchema.parse(await parseJson(req))
       const [job] = await db.select().from(jobs).where(eq(jobs.id, input.jobId)).limit(1)
       if (!job) return json({ error: 'Project not found.' }, 404)
 
@@ -127,7 +115,7 @@ export default async (req: Request) => {
     }
 
     if (parts.length === 3 && parts[0] === 'conversations' && parts[2] === 'messages') {
-      const conversationId = uuid.parse(parts[1])
+      const conversationId = conversationInputSchema.shape.jobId.parse(parts[1])
       const [membership] = await db.select({ id: conversationMembers.id })
         .from(conversationMembers).where(and(
           eq(conversationMembers.conversationId, conversationId),
@@ -147,7 +135,7 @@ export default async (req: Request) => {
         })))
       }
 
-      const input = messageInput.parse(await parseJson(req))
+      const input = messageInputSchema.parse(await parseJson(req))
       if (input.attachmentId) {
         const [asset] = await db.select().from(uploads).where(eq(uploads.id, input.attachmentId)).limit(1)
         if (!asset || asset.ownerId !== user.id || asset.purpose !== 'message_attachment') {
@@ -198,7 +186,7 @@ export default async (req: Request) => {
 
     return json({ error: 'Endpoint not found.' }, 404)
   } catch (error) {
-    if (error instanceof z.ZodError) return json({ error: error.issues.map((i) => i.message).join(' ') }, 422)
+    if (error instanceof Error && error.name === 'ZodError') return json({ error: ('issues' in error && Array.isArray(error.issues) ? error.issues.map((i: { message: string }) => i.message).join(' ') : 'Invalid input.') }, 422)
     if (error instanceof SyntaxError) return json({ error: 'Invalid JSON.' }, 400)
     return json({ error: error instanceof Error ? error.message : 'Messaging is temporarily unavailable.' }, 503)
   }
