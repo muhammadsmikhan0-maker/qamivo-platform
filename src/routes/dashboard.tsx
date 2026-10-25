@@ -158,6 +158,8 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeId, setActiveId] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messagesConversationId, setMessagesConversationId] = useState('')
+  const visibleMessages = activeId && messagesConversationId === activeId ? messages : []
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -199,15 +201,15 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
   }, [filePreview])
 
   useEffect(() => {
-    if (!activeId) {
-      setMessages([])
-      return
-    }
+    if (!activeId) return
     let current = true
     const loadMessages = async () => {
       try {
         const rows = await commsRequest<ChatMessage[]>(`/api/comms/conversations/${activeId}/messages`)
-        if (current) setMessages(rows)
+        if (current) {
+          setMessages(rows)
+          setMessagesConversationId(activeId)
+        }
       } catch (e) {
         if (current) setError(e instanceof Error ? e.message : 'Unable to load messages.')
       }
@@ -262,6 +264,7 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
         `/api/comms/conversations/${activeId}/messages`, 'POST', { body: text, ...(attachmentId ? { attachmentId } : {}) },
       )
       setMessages((current) => [...current, result])
+      setMessagesConversationId(activeId)
       setText('')
       setFile(null)
       setFilePreview('')
@@ -354,8 +357,8 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
                 <h3 style={{ margin: 0 }}>{conversations.find((item) => item.id === activeId)?.participantName || 'Conversation'}</h3>
               </div>
               <div aria-live="polite" aria-label="Conversation messages" style={{ display: 'grid', gap: 12, maxHeight: 440, overflowY: 'auto', padding: 12, border: '1px solid #dbe4ee', borderRadius: 12, background: '#f8fafc' }}>
-                {!messages.length && <p className="muted">No messages yet. Start the conversation below.</p>}
-                {messages.map((message) => (
+                {!visibleMessages.length && <p className="muted">No messages yet. Start the conversation below.</p>}
+                {visibleMessages.map((message) => (
                   <article key={message.id} style={{ justifySelf: message.mine ? 'end' : 'start', width: 'min(100%, 420px)', background: message.mine ? '#e4f3fb' : '#fff', border: '1px solid #dbe4ee', borderRadius: 10, padding: 12 }}>
                     <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: 0 }}>{message.body}</p>
                     {message.attachmentUrl && <img src={message.attachmentUrl} alt="Image attachment in conversation" style={{ display: 'block', maxWidth: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 8 }} />}
