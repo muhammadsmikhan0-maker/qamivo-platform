@@ -116,6 +116,7 @@ function ProfileEditor() {
                 if (!response.ok || !payload.id) throw new Error(payload.error || 'Image upload failed.')
                 setAvatarKey(payload.id)
                 setPhotoPreview(`/api/uploads/${payload.id}`)
+                URL.revokeObjectURL(localPreview)
                 setPhotoStatus('Image stored privately. Click Save profile to attach it to your account.')
               } catch (error) {
                 URL.revokeObjectURL(localPreview)
