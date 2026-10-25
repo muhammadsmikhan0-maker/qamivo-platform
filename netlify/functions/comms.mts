@@ -10,7 +10,7 @@ import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transaction
 
 const uuid = z.string().uuid()
 const conversationInput = z.object({
-  recipientUsername: z.string().trim().toLowerCase().min(3).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  recipientUsername: z.string().trim().toLowerCase().min(3).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
   jobId: uuid,
   subject: z.string().trim().min(3).max(120).default('Project conversation'),
 })
@@ -63,7 +63,7 @@ export default async (req: Request) => {
           .limit(1)
         const [profile] = otherMember ? await db.select({
           username: profiles.username, name: profiles.name, avatarKey: profiles.avatarKey,
-          avatarPosition: profiles.avatarPosition,
+          avatarPosition: profiles.avatarPosition, isPublic: profiles.isPublic,
         }).from(profiles).where(eq(profiles.id, otherMember.memberId)).limit(1) : []
         const [last] = await db.select({ body: messages.body, createdAt: messages.createdAt })
           .from(messages).where(eq(messages.conversationId, row.id))
@@ -71,7 +71,7 @@ export default async (req: Request) => {
         result.push({
           ...row, createdAt: row.createdAt.toISOString(),
           participantId: otherMember?.memberId || '', participantName: profile?.name || 'Qamivo member',
-          participantUsername: profile?.username || '', avatarUrl: profile?.avatarKey ? `/api/uploads/${profile.avatarKey}` : null,
+          participantUsername: profile?.username || '', avatarUrl: profile?.isPublic && profile.avatarKey ? `/api/uploads/${profile.avatarKey}` : null,
           lastMessage: last?.body || '', lastMessageAt: last?.createdAt?.toISOString() || null,
         })
       }
@@ -80,28 +80,45 @@ export default async (req: Request) => {
 
     if (parts.length === 1 && parts[0] === 'conversations' && req.method === 'POST') {
       const input = conversationInput.parse(await parseJson(req))
-      const [recipient] = await db.select().from(profiles).where(eq(profiles.username, input.recipientUsername)).limit(1)
       const [job] = await db.select().from(jobs).where(eq(jobs.id, input.jobId)).limit(1)
-      if (!recipient || !job || recipient.id === user.id) return json({ error: 'Member or project not found.' }, 404)
+      if (!job) return json({ error: 'Project not found.' }, 404)
 
-      let permitted = false
+      let recipientId = ''
       if (job.ownerId === user.id) {
+        if (!input.recipientUsername) {
+          return json({ error: 'Enter the public username of a freelancer who proposed on your project.' }, 422)
+        }
+        const [recipient] = await db.select({ id: profiles.id }).from(profiles)
+          .where(eq(profiles.username, input.recipientUsername)).limit(1)
+        if (!recipient || recipient.id === user.id) return json({ error: 'Member not found.' }, 404)
         const [proposal] = await db.select({ id: proposals.id }).from(proposals)
           .where(and(eq(proposals.jobId, job.id), eq(proposals.freelancerId, recipient.id))).limit(1)
-        permitted = !!proposal
-      } else if (job.ownerId === recipient.id) {
-        const [proposal] = await db.select({ id: proposals.id }).from(proposals)
+        if (!proposal) return json({ error: 'Messaging is available only with freelancers who have proposed on this project.' }, 403)
+        recipientId = recipient.id
+      } else {
+        const [ownProposal] = await db.select({ id: proposals.id }).from(proposals)
           .where(and(eq(proposals.jobId, job.id), eq(proposals.freelancerId, user.id))).limit(1)
-        permitted = !!proposal
+        if (!ownProposal) return json({ error: 'Messaging is available only for a project you own or have proposed on.' }, 403)
+        recipientId = job.ownerId
       }
-      if (!permitted) return json({ error: 'Messaging is only available between a project owner and a freelancer who submitted a proposal.' }, 403)
+      if (!recipientId || recipientId === user.id) return json({ error: 'Invalid conversation participant.' }, 403)
+
+      const [existing] = await db.select({ id: conversations.id }).from(conversations)
+        .innerJoin(conversationMembers, eq(conversationMembers.conversationId, conversations.id))
+        .where(and(eq(conversations.jobId, job.id), eq(conversationMembers.memberId, user.id)))
+        .limit(100)
+      if (existing) {
+        const [shared] = await db.select({ id: conversationMembers.id }).from(conversationMembers)
+          .where(and(eq(conversationMembers.conversationId, existing.id), eq(conversationMembers.memberId, recipientId))).limit(1)
+        if (shared) return json({ id: existing.id, subject: 'Project conversation' }, 200)
+      }
 
       const [conversation] = await db.insert(conversations).values({
         jobId: job.id, subject: input.subject,
       }).returning()
       await db.insert(conversationMembers).values([
         { conversationId: conversation.id, memberId: user.id },
-        { conversationId: conversation.id, memberId: recipient.id },
+        { conversationId: conversation.id, memberId: recipientId },
       ])
       return json({ id: conversation.id, subject: conversation.subject }, 201)
     }
@@ -145,6 +162,8 @@ export default async (req: Request) => {
         .from(conversationMembers)
         .where(and(eq(conversationMembers.conversationId, conversationId), ne(conversationMembers.memberId, user.id)))
       const notificationStatuses: string[] = []
+      const [senderProfile] = await db.select({ name: profiles.name })
+        .from(profiles).where(eq(profiles.id, user.id)).limit(1)
       for (const member of otherMembers) {
         const [profile] = await db.select({ email: profiles.email, name: profiles.name })
           .from(profiles).where(eq(profiles.id, member.memberId)).limit(1)
@@ -154,7 +173,7 @@ export default async (req: Request) => {
         }
         const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
         const subject = 'You have a new message on Qamivo'
-        const html = brandedNoticeHtml(subject, `${user.email || 'A Qamivo member'} sent you a message: ${input.body.slice(0, 1200) || 'An image was attached.'}`, `${base}/dashboard`)
+        const html = brandedNoticeHtml(subject, `${senderProfile?.name || 'A Qamivo member'} sent you a message: ${input.body.slice(0, 1200) || 'An image was attached.'}`, `${base}/dashboard`)
         const result = await sendTransactionalEmail({
           to: profile.email, subject, html, eventType: 'message.new',
           idempotencyKey: `message-notification/${message.id}/${member.memberId}`,
