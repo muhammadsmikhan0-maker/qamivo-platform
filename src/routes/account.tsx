@@ -28,8 +28,18 @@ function ProfileEditor() {
     [error, setError] = useState(''),
     [saved, setSaved] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
+  const [avatarKey, setAvatarKey] = useState<string | null>(null)
+  const [avatarPosition, setAvatarPosition] = useState<'center' | 'top' | 'bottom'>('center')
+  const [photoPreview, setPhotoPreview] = useState('')
+  const [photoPending, setPhotoPending] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const [photoStatus, setPhotoStatus] = useState('')
   useEffect(() => {
-    if (result.data?.profile) setIsPublic(!!result.data.profile.isPublic)
+    if (result.data?.profile) {
+      setIsPublic(!!result.data.profile.isPublic)
+      setAvatarKey(result.data.profile.avatarKey || null)
+      setAvatarPosition(result.data.profile.avatarPosition || 'center')
+    }
   }, [result.data])
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -38,8 +48,9 @@ function ProfileEditor() {
     setSaved(false)
     const f = new FormData(e.currentTarget)
     try {
-      await api('profile', 'PUT', { ...Object.fromEntries(f), isPublic })
+      await api('profile', 'PUT', { ...Object.fromEntries(f), isPublic, avatarKey, avatarPosition })
       setSaved(true)
+      setPhotoStatus('Profile and saved picture settings were updated.')
       await result.reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to save profile.')
@@ -55,6 +66,78 @@ function ProfileEditor() {
       key={p?.updatedAt}
       onSubmit={submit}
     >
+      <section aria-labelledby="avatar-heading" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
+        <h2 id="avatar-heading" style={{ margin: 0 }}>Profile picture</h2>
+        {photoPreview || avatarKey ? (
+          <img
+            src={photoPreview || `/api/uploads/${avatarKey}`}
+            alt="Profile picture preview"
+            style={{ width: 112, height: 112, borderRadius: '50%', objectFit: 'cover', objectPosition: avatarPosition, border: '1px solid #dbe4ee' }}
+          />
+        ) : (
+          <div aria-label="Default avatar" style={{ width: 112, height: 112, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', color: '#34516b', fontSize: 32, fontWeight: 700 }}>
+            {(p?.name || 'Q').slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <div>
+          <label htmlFor="profile-avatar">Upload picture (JPEG, PNG, WebP or GIF; max 5 MB)</label>
+          <input
+            id="profile-avatar"
+            className="field"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            disabled={photoPending}
+            onChange={async (event) => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              if (!file) return
+              setPhotoError('')
+              setPhotoStatus('')
+              if (file.size > 5 * 1024 * 1024) {
+                setPhotoError('Choose an image no larger than 5 MB.')
+                return
+              }
+              const localPreview = URL.createObjectURL(file)
+              setPhotoPreview(localPreview)
+              setPhotoPending(true)
+              try {
+                const form = new FormData()
+                form.append('file', file)
+                form.append('purpose', 'avatar')
+                const response = await fetch('/api/uploads', { method: 'POST', credentials: 'same-origin', body: form })
+                const payload = await response.json().catch(() => ({})) as { id?: string; error?: string }
+                if (!response.ok || !payload.id) throw new Error(payload.error || 'Image upload failed.')
+                setAvatarKey(payload.id)
+                setPhotoPreview(`/api/uploads/${payload.id}`)
+                setPhotoStatus('Image stored privately. Click Save profile to attach it to your account.')
+              } catch (error) {
+                URL.revokeObjectURL(localPreview)
+                setPhotoPreview('')
+                setPhotoError(error instanceof Error ? error.message : 'Image upload failed.')
+              } finally {
+                setPhotoPending(false)
+              }
+            }}
+          />
+          <p className="muted">The local preview is not a saved profile picture. The image is attached to your profile only after you click Save profile.</p>
+        </div>
+        <div style={{ maxWidth: 260 }}>
+          <label htmlFor="profile-avatar-position">Picture framing</label>
+          <select id="profile-avatar-position" className="field" value={avatarPosition} onChange={(e) => setAvatarPosition(e.target.value as 'center' | 'top' | 'bottom')}>
+            <option value="center">Center</option>
+            <option value="top">Top</option>
+            <option value="bottom">Bottom</option>
+          </select>
+        </div>
+        {(avatarKey || photoPreview) && (
+          <button type="button" className="button secondary" onClick={() => { setAvatarKey(null); setPhotoPreview(''); setPhotoStatus('Picture removal will apply after you save the profile.') }}>
+            Remove picture
+          </button>
+        )}
+        {photoPending && <p className="muted" role="status">Uploading and validating image…</p>}
+        {photoError && <div className="notice error" role="alert">{photoError}</div>}
+        {photoStatus && <div className="notice" role="status">{photoStatus}</div>}
+      </section>
       <div className="form-grid">
         <div>
           <label htmlFor="profile-name">Professional display name</label>
