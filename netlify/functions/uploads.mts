@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs'
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
-import { and, arrayContains, eq } from 'drizzle-orm'
+import { and, arrayContains, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { database } from '../../db/index.js'
 import { uploads, profiles, messages, conversationMembers, jobs, proposals } from '../../db/schema.js'
