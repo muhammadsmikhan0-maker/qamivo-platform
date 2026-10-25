@@ -47,8 +47,15 @@ function ProfileEditor() {
     setError('')
     setSaved(false)
     const f = new FormData(e.currentTarget)
+    const previousAvatarKey = result.data?.profile?.avatarKey || null
     try {
       await api('profile', 'PUT', { ...Object.fromEntries(f), isPublic, avatarKey, avatarPosition })
+      if (previousAvatarKey && previousAvatarKey !== avatarKey) {
+        await fetch(`/api/uploads/${previousAvatarKey}`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        }).catch(() => undefined)
+      }
       setSaved(true)
       setPhotoStatus('Profile and saved picture settings were updated.')
       await result.reload()
