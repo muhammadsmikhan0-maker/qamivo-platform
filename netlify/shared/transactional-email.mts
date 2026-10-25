@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { database } from '../../db/index.js'
 import { emailEvents } from '../../db/schema.js'
 
@@ -54,6 +54,21 @@ export async function sendTransactionalEmail(input: {
     return { status: 'failed' }
   }
 
+  const [suppression] = await db.select({ id: emailEvents.id, status: emailEvents.status })
+    .from(emailEvents)
+    .where(and(
+      eq(emailEvents.recipient, recipient),
+      inArray(emailEvents.status, ['bounced', 'complained']),
+    ))
+    .limit(1)
+  if (suppression) {
+    await db.insert(emailEvents).values({
+      id: eventId, eventType: input.eventType, recipient,
+      status: 'failed', errorCode: `recipient_suppressed_${suppression.status}`,
+    })
+    return { status: 'failed' }
+  }
+
   const apiKey = process.env.RESEND_API_KEY
   const from = process.env.QAMIVO_FROM_EMAIL
   await db.insert(emailEvents).values({
@@ -91,8 +106,14 @@ export async function sendTransactionalEmail(input: {
         }).where(eq(emailEvents.id, eventId))
         return { status: 'sent', providerId: payload.id }
       }
+      if (response.status === 429) {
+        lastError = 'provider_rate_limited'
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500))
+        continue
+      }
       lastError = response.status >= 500 ? 'provider_temporary_error' : `provider_http_${response.status}`
       if (response.status < 500) break
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300))
     } catch {
       lastError = 'provider_network_error'
     }
