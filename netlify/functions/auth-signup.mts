@@ -217,7 +217,7 @@ export default async (req: Request) => {
         newUser = await admin.createUser({
           email,
           password,
-          data: { full_name: verification.fullName },
+          data: { user_metadata: { full_name: verification.fullName } },
         })
       } catch {
         await db.update(verificationChallenges).set({ status: 'failed' })
