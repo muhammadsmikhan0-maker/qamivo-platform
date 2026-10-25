@@ -93,6 +93,13 @@ export function Directory({ services = false }: { services?: boolean }) {
                 <span className="pill">
                   {categories.find((c) => c.slug === p.category)?.name}
                 </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                  {p.avatarKey ? (
+                    <img src={`/api/uploads/${p.avatarKey}`} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', objectPosition: p.avatarPosition || 'center', flexShrink: 0 }} />
+                  ) : (
+                    <span aria-hidden="true" style={{ width: 56, height: 56, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', color: '#34516b', fontWeight: 700, fontSize: 22, flexShrink: 0 }}>{p.name.slice(0, 1).toUpperCase()}</span>
+                  )}
+                  <div style={{ minWidth: 0 }}>
                 <h3>
                   {p.name}{' '}
                   <ArrowUpRight size={16} style={{ display: 'inline' }} />
@@ -104,6 +111,7 @@ export function Directory({ services = false }: { services?: boolean }) {
                 </p>
                 <div className="meta">
                   {p.country} · {p.skills}
+                  </div>
                 </div>
               </a>
             ))}
