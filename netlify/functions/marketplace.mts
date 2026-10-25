@@ -1,6 +1,6 @@
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
-import { and, desc, eq, ilike, or, sql, lt } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, or, sql, lt } from 'drizzle-orm'
 import { z } from 'zod'
 import { database } from '../../db/index.js'
 import {
@@ -9,7 +9,9 @@ import {
   proposals,
   auditEvents,
   rateLimits,
+  uploads,
 } from '../../db/schema.js'
+import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transactional-email.mjs'
 import {
   jobSchema,
   proposalSchema,
@@ -73,22 +75,43 @@ export default async (req: Request) => {
         )
       if (resource === 'profile' && req.method === 'PUT') {
         const data = profileSchema.parse(body)
+        if (data.avatarKey) {
+          const [asset] = await db.select().from(uploads).where(eq(uploads.id, data.avatarKey)).limit(1)
+          if (!asset || asset.ownerId !== user.id || asset.purpose !== 'avatar') {
+            return json({ error: 'Choose a profile image uploaded by your own account.' }, 403)
+          }
+        }
+        const profileData = {
+          ...data,
+          id: user.id,
+          email: user.email || null,
+          avatarKey: data.avatarKey || null,
+          avatarPosition: data.avatarPosition || 'center',
+        }
         const result = await db
           .insert(profiles)
-          .values({ ...data, id: user.id })
+          .values(profileData)
           .onConflictDoUpdate({
             target: profiles.id,
-            set: { ...data, updatedAt: new Date() },
+            set: { ...profileData, updatedAt: new Date() },
           })
           .returning()
         return json(result[0])
       }
       if (resource === 'jobs' && !id && req.method === 'POST') {
         const data = jobSchema.parse(body)
+        const referenceImageIds = data.referenceImageIds || []
+        if (referenceImageIds.length) {
+          const assets = await db.select().from(uploads).where(inArray(uploads.id, referenceImageIds))
+          if (assets.length !== new Set(referenceImageIds).size ||
+              assets.some((asset) => asset.ownerId !== user.id || asset.purpose !== 'job_reference')) {
+            return json({ error: 'One or more project reference images are not owned by your account.' }, 403)
+          }
+        }
         const [result] = await db.transaction(async (tx) => {
           const rows = await tx
             .insert(jobs)
-            .values({ ...data, ownerId: user.id })
+            .values({ ...data, referenceImageIds, ownerId: user.id })
             .returning()
           await tx
             .insert(auditEvents)
@@ -99,12 +122,24 @@ export default async (req: Request) => {
             })
           return rows
         })
+        const adminEmail = process.env.QAMIVO_ADMIN_EMAIL
+        if (adminEmail) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          await sendTransactionalEmail({
+            to: adminEmail,
+            subject: 'New project published on Qamivo',
+            html: brandedNoticeHtml('New project published', result.title, `${base}/jobs/${result.id}`),
+            eventType: 'job.created.admin',
+            idempotencyKey: `job-created-admin/${result.id}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
         return json(result, 201)
       }
       if (resource === 'jobs' && id) {
         idSchema.parse(id)
+        let proposalNotification: { email: string | null; jobTitle: string; jobId: string; proposalId: string } | null = null
         // Serialize proposals and closing against the same job row.
-        return await db.transaction(async (tx) => {
+        const response = await db.transaction(async (tx) => {
           const [job] = await tx
             .select()
             .from(jobs)
@@ -146,6 +181,9 @@ export default async (req: Request) => {
                 action: 'proposal.submitted',
                 recordId: proposal.id,
               })
+            const [ownerProfile] = await tx.select({ email: profiles.email })
+              .from(profiles).where(eq(profiles.id, job.ownerId)).limit(1)
+            proposalNotification = { email: ownerProfile?.email || null, jobTitle: job.title, jobId: job.id, proposalId: proposal.id }
             return json(proposal, 201)
           }
           if (!child && req.method === 'PATCH') {
@@ -166,13 +204,31 @@ export default async (req: Request) => {
           }
           return json({ error: 'Operation not found.' }, 404)
         })
+        const notification = proposalNotification as {
+          email: string | null
+          jobTitle: string
+          jobId: string
+          proposalId: string
+        } | null
+        if (notification?.email && response.status === 201) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          await sendTransactionalEmail({
+            to: notification.email,
+            subject: 'A new proposal was submitted on Qamivo',
+            html: brandedNoticeHtml('New proposal received', `A freelancer submitted a proposal for: ${notification.jobTitle}`, `${base}/jobs/${notification.jobId}`),
+            eventType: 'proposal.submitted',
+            idempotencyKey: `proposal-submitted/${notification.proposalId}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
+        return response
       }
       if (resource === 'proposals' && id && req.method === 'PATCH') {
         idSchema.parse(id)
         const data = z
           .object({ status: z.enum(['shortlisted', 'rejected']) })
           .parse(body)
-        return await db.transaction(async (tx) => {
+        let proposalDecision: { email: string | null; jobTitle: string; proposalId: string; status: 'shortlisted' | 'rejected' } | null = null
+        const response = await db.transaction(async (tx) => {
           const [entry] = await tx
             .select({ proposal: proposals, job: jobs })
             .from(proposals)
@@ -201,8 +257,29 @@ export default async (req: Request) => {
               action: `proposal.${data.status}`,
               recordId: id,
             })
+          const [recipient] = await tx.select({ email: profiles.email })
+            .from(profiles).where(eq(profiles.id, entry.proposal.freelancerId)).limit(1)
+          proposalDecision = { email: recipient?.email || null, jobTitle: entry.job.title, proposalId: id, status: data.status }
           return json(result)
         })
+        const decision = proposalDecision as {
+          email: string | null
+          jobTitle: string
+          proposalId: string
+          status: 'shortlisted' | 'rejected'
+        } | null
+        if (decision?.email && response.status === 200) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          const label = decision.status === 'shortlisted' ? 'Your proposal was shortlisted' : 'Your proposal was declined'
+          await sendTransactionalEmail({
+            to: decision.email,
+            subject: label + ' on Qamivo',
+            html: brandedNoticeHtml(label, `Project: ${decision.jobTitle}`, `${base}/dashboard`),
+            eventType: `proposal.${decision.status}`,
+            idempotencyKey: `proposal-decision/${decision.proposalId}/${decision.status}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
+        return response
       }
       return json({ error: 'Operation not found.' }, 404)
     }
@@ -230,6 +307,8 @@ export default async (req: Request) => {
           skills: profiles.skills,
           category: profiles.category,
           country: profiles.country,
+          avatarKey: profiles.avatarKey,
+          avatarPosition: profiles.avatarPosition,
         })
         .from(profiles)
         .where(and(...conditions))
@@ -315,6 +394,8 @@ export default async (req: Request) => {
     if (resource === 'me') {
       const user = await getUser()
       if (!user) return json({ error: 'Sign in to view your workspace.' }, 401)
+      await db.update(profiles).set({ email: user.email || null })
+        .where(eq(profiles.id, user.id))
       const [profile] = await db
         .select()
         .from(profiles)

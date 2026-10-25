@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMember, MemberGate } from '@/components/marketplace/auth'
 import { PageIntro } from '@/components/marketplace/layout'
 import { Feedback } from '@/components/marketplace/common'
@@ -108,12 +108,20 @@ function ProjectActions({
   if (workspace.loading) return <Feedback {...workspace} />
   if (workspace.error) return <Feedback {...workspace} />
   if (workspace.data?.jobs.some((j) => j.id === job.id))
-    return <OwnerActions job={job} reload={reload} />
+    return (
+      <>
+        <ProjectReferenceGallery jobId={job.id} />
+        <OwnerActions job={job} reload={reload} />
+      </>
+    )
   if (workspace.data?.proposals.some((p) => p.jobId === job.id))
     return (
-      <div className="notice success">
-        Your proposal is recorded. Check your workspace for its review status.
-      </div>
+      <>
+        <ProjectReferenceGallery jobId={job.id} />
+        <div className="notice success">
+          Your proposal is recorded. Check your workspace for its review status.
+        </div>
+      </>
     )
   if (!user) return null
   if (job.status !== 'open')
@@ -303,6 +311,46 @@ function OwnerActions({
           )}
         </article>
       ))}
+    </section>
+  )
+}
+
+
+function ProjectReferenceGallery({ jobId }: { jobId: string }) {
+  const [images, setImages] = useState<{ id: string; url: string; contentType: string; fileSize: number }[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let active = true
+    fetch('/api/uploads?jobId=' + encodeURIComponent(jobId), { credentials: 'same-origin' })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({})) as { error?: string } | { id: string; url: string; contentType: string; fileSize: number }[]
+        if (!response.ok) throw new Error('Project reference images are unavailable to this account.')
+        return body as { id: string; url: string; contentType: string; fileSize: number }[]
+      })
+      .then((rows) => { if (active) setImages(rows) })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Unable to load project images.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [jobId])
+  if (loading) return <p className="muted" role="status">Checking project references…</p>
+  if (error || !images.length) return null
+  return (
+    <section className="record" style={{ marginTop: 20 }}>
+      <h2>Project reference images</h2>
+      <p className="muted">Private images shared only with the project owner and members who have submitted a proposal.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        {images.map((image, index) => (
+          <a key={image.id} href={image.url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+            <img
+              src={image.url}
+              alt={`Project reference ${index + 1}`}
+              style={{ width: 160, height: 120, objectFit: 'contain', background: '#f1f5f9', borderRadius: 8 }}
+            />
+            <span className="muted">{Math.ceil(image.fileSize / 1024)} KB · Open image</span>
+          </a>
+        ))}
+      </div>
     </section>
   )
 }

@@ -11,9 +11,9 @@ Qamivo should become one coherent, original platform for freelancers, clients, p
 
 ## Current evidence
 
-The current codebase includes a TanStack Start/React app, Netlify Functions, Netlify Identity, Netlify Database with Drizzle, profiles, public discovery, jobs, proposals, shortlisting/rejection and a basic member workspace. A production deploy is marked ready in Netlify.
+The current codebase includes a TanStack Start/React app, Netlify Functions, Netlify Identity, Netlify Database with Drizzle, profiles, public discovery, jobs, proposals, shortlisting/rejection and a basic member workspace. The working branch now also contains a custom OTP registration endpoint, email event handling, participant-scoped conversations with unread counters and polling, plus private image storage and profile/project/message upload controls. A production deploy is marked ready in Netlify, but these branch changes have not been deployed or end-to-end verified.
 
-The existing project ledger says **Implemented, Not Fully Verified**. The code has not been proven production-ready by an end-to-end acceptance run. Netlify Forms currently lists no forms. No configured inbound-mailbox integration was verified. Payments, escrow, contracts, messaging, notifications, verified reviews, moderation/admin workflows and full owner operations are not implemented in the current milestone.
+The existing project ledger says **Implemented, Not Fully Verified**. The code has not been proven production-ready by an end-to-end acceptance run. Netlify Forms currently lists no forms. No configured inbound-mailbox integration was verified, and the live environment has no Resend API key, sender address, webhook secret or OTP secret registered. Payments, escrow, contracts, verified reviews, moderation/admin workflows and a full owner operations console are not implemented in the current milestone. Messaging, OTP, email hooks and uploads are code in a review branch, not live features.
 
 ## Priorities
 
@@ -38,7 +38,7 @@ The existing project ledger says **Implemented, Not Fully Verified**. The code h
 ### P2 — End-to-end marketplace workflow
 
 - Add project/job editing and cancellation with an audit trail; preserve clear status transitions.
-- Add client/freelancer messaging, notifications and unread state with access control.
+- Persistent client/freelancer messaging, participant-scoped access, unread counts and polling are implemented in the review branch; end-to-end verification is still required. Extend notifications and attachments only after the preview tests pass.
 - Add contracts, scope acceptance, milestones, submissions, revision requests and completion records. Shortlisting must not be presented as accepting a contract.
 - Add reporting, block/mute, abuse queues, dispute handling and support tickets with role-separated access.
 - Add verified reviews only for completed eligible engagements, plus moderation and appeal handling.
@@ -73,14 +73,14 @@ The existing project ledger says **Implemented, Not Fully Verified**. The code h
 - **Netlify Identity:** existing registration/login/confirmation foundation; improve and test it rather than installing a competing identity provider by default.
 - **GitHub Actions:** baseline quality workflow is being proposed in a branch/PR.
 - **Netlify extensions:** install only when a concrete requirement and setup plan exist. Security extensions need code/configuration and testing; installing one by itself is not proof that the app is protected. Analytics must have a privacy/measurement decision. No extension should be installed just to increase the count.
-- **Email:** no inbound Gmail inbox access or production transactional sender was verified. Configure after authorised provider connection and sender verification.
+- **Email:** Resend sender/OTP/webhook code is present on the review branch; no production provider credentials or sending-domain verification are configured. Existing Netlify Identity recovery remains provider-managed. No inbound Gmail inbox access is verified.
 
 ## Release acceptance checklist
 
 - [ ] CI checks pass on the proposed revision.
 - [ ] Netlify Deploy Preview works for public and protected flows.
-- [ ] Registration, email confirmation, login, recovery and logout have been end-to-end tested.
-- [ ] Database persistence, duplicate handling and migrations are verified on preview.
+- [ ] OTP registration, provider email delivery, login, recovery and logout have been end-to-end tested.
+- [ ] Database persistence, duplicate handling and all new OTP/messaging/upload migrations are verified on preview.
 - [ ] Cross-account access tests prove that private proposals, leads, messages and support records cannot be read by other members.
 - [ ] Owner/staff authorisation is enforced on the server and audited.
 - [ ] Contact forms, email delivery, spam protection and consent text are tested.

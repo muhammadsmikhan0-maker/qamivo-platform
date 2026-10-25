@@ -34,9 +34,24 @@ function ProfilePage() {
     <main className="wrap page-main">
       {result.data && !result.error && (
         <>
-          <PageIntro eyebrow="PROFESSIONAL PROFILE" title={result.data.name}>
-            {result.data.headline}
-          </PageIntro>
+          <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginBottom: 24 }}>
+            {result.data.avatarKey ? (
+              <img
+                src={`/api/uploads/${result.data.avatarKey}`}
+                alt={`${result.data.name}'s profile picture`}
+                style={{ width: 104, height: 104, borderRadius: '50%', objectFit: 'cover', objectPosition: result.data.avatarPosition || 'center' }}
+              />
+            ) : (
+              <div aria-label="Default profile avatar" style={{ width: 104, height: 104, borderRadius: '50%', background: '#e7eef5', display: 'grid', placeItems: 'center', fontSize: 30, fontWeight: 700 }}>
+                {result.data.name.slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div style={{ flex: 1 }}>
+              <PageIntro eyebrow="PROFESSIONAL PROFILE" title={result.data.name}>
+                {result.data.headline}
+              </PageIntro>
+            </div>
+          </div>
           <div className="detail-grid">
             <article className="prose">
               <h2>About</h2>

@@ -14,6 +14,7 @@ export const jobSchema = z.object({
   category: categorySchema,
   budget: money,
   currency: z.enum(['USD', 'PKR', 'GBP', 'EUR']),
+  referenceImageIds: z.array(z.string().uuid()).max(5).default([]),
 })
 export const proposalSchema = z.object({
   coverLetter: z.string().trim().min(60).max(6000),
@@ -21,6 +22,8 @@ export const proposalSchema = z.object({
   days: z.coerce.number().int().min(1).max(730),
 })
 export const profileSchema = z.object({
+  avatarKey: z.string().uuid().nullable().optional(),
+  avatarPosition: z.enum(['center', 'top', 'bottom']).default('center'),
   username: z
     .string()
     .trim()

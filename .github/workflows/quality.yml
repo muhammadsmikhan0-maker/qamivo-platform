@@ -37,6 +37,11 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
+      # TanStack's routeTree.gen.ts is generated during the Vite build.
+      # Build first so the subsequent typecheck sees the generated route types.
+      - name: Build production bundle
+        run: pnpm run build
+
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -45,6 +50,3 @@ jobs:
 
       - name: Run tests
         run: pnpm test
-
-      - name: Build production bundle
-        run: pnpm run build

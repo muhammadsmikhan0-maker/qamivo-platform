@@ -10,6 +10,8 @@ export type Profile = {
   category: string
   country: string
   isPublic?: boolean
+  avatarKey?: string | null
+  avatarPosition?: 'center' | 'top' | 'bottom'
 }
 export type Job = {
   id: string
@@ -77,7 +79,13 @@ export function useApi<T>(path: string) {
     }
   }, [path])
   useEffect(() => {
-    void reload()
+    let active = true
+    queueMicrotask(() => {
+      if (active) void reload()
+    })
+    return () => {
+      active = false
+    }
   }, [reload])
   return { data, error, loading, reload }
 }
