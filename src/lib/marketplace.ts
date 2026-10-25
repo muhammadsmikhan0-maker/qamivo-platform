@@ -79,7 +79,13 @@ export function useApi<T>(path: string) {
     }
   }, [path])
   useEffect(() => {
-    void reload()
+    let active = true
+    queueMicrotask(() => {
+      if (active) void reload()
+    })
+    return () => {
+      active = false
+    }
   }, [reload])
   return { data, error, loading, reload }
 }
