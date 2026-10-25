@@ -103,11 +103,11 @@ export default async (req: Request) => {
       }
       if (!recipientId || recipientId === user.id) return json({ error: 'Invalid conversation participant.' }, 403)
 
-      const [existing] = await db.select({ id: conversations.id }).from(conversations)
+      const existingConversations = await db.select({ id: conversations.id }).from(conversations)
         .innerJoin(conversationMembers, eq(conversationMembers.conversationId, conversations.id))
         .where(and(eq(conversations.jobId, job.id), eq(conversationMembers.memberId, user.id)))
         .limit(100)
-      if (existing) {
+      for (const existing of existingConversations) {
         const [shared] = await db.select({ id: conversationMembers.id }).from(conversationMembers)
           .where(and(eq(conversationMembers.conversationId, existing.id), eq(conversationMembers.memberId, recipientId))).limit(1)
         if (shared) return json({ id: existing.id, subject: 'Project conversation' }, 200)
