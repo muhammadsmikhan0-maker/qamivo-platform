@@ -11,7 +11,7 @@ const purposes = new Set([
   'avatar', 'company_logo', 'portfolio', 'job_reference',
   'message_attachment', 'support_attachment', 'course_image', 'ad_creative',
 ])
-function uploadStore() { return getStore(process.env.CONTEXT === 'production' ? 'qamivo-user-uploads' : 'qamivo-preview-user-uploads') }
+function uploadStore() { return getStore({ name: process.env.CONTEXT === 'production' ? 'qamivo-user-uploads' : 'qamivo-preview-user-uploads', consistency: 'strong' }) }
 const uuid = z.string().uuid()
 
 function json(body: unknown, status = 200) {
