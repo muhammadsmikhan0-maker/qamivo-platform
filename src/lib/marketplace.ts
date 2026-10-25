@@ -10,6 +10,8 @@ export type Profile = {
   category: string
   country: string
   isPublic?: boolean
+  avatarKey?: string | null
+  avatarPosition?: 'center' | 'top' | 'bottom'
 }
 export type Job = {
   id: string
