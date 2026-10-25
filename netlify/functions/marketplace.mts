@@ -1,6 +1,6 @@
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
-import { and, desc, eq, ilike, or, sql, lt } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, or, sql, lt } from 'drizzle-orm'
 import { z } from 'zod'
 import { database } from '../../db/index.js'
 import {
@@ -9,7 +9,9 @@ import {
   proposals,
   auditEvents,
   rateLimits,
+  uploads,
 } from '../../db/schema.js'
+import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transactional-email.mjs'
 import {
   jobSchema,
   proposalSchema,
@@ -73,22 +75,43 @@ export default async (req: Request) => {
         )
       if (resource === 'profile' && req.method === 'PUT') {
         const data = profileSchema.parse(body)
+        if (data.avatarKey) {
+          const [asset] = await db.select().from(uploads).where(eq(uploads.id, data.avatarKey)).limit(1)
+          if (!asset || asset.ownerId !== user.id || asset.purpose !== 'avatar') {
+            return json({ error: 'Choose a profile image uploaded by your own account.' }, 403)
+          }
+        }
+        const profileData = {
+          ...data,
+          id: user.id,
+          email: user.email || null,
+          avatarKey: data.avatarKey || null,
+          avatarPosition: data.avatarPosition || 'center',
+        }
         const result = await db
           .insert(profiles)
-          .values({ ...data, id: user.id })
+          .values(profileData)
           .onConflictDoUpdate({
             target: profiles.id,
-            set: { ...data, updatedAt: new Date() },
+            set: { ...profileData, updatedAt: new Date() },
           })
           .returning()
         return json(result[0])
       }
       if (resource === 'jobs' && !id && req.method === 'POST') {
         const data = jobSchema.parse(body)
+        const referenceImageIds = data.referenceImageIds || []
+        if (referenceImageIds.length) {
+          const assets = await db.select().from(uploads).where(inArray(uploads.id, referenceImageIds))
+          if (assets.length !== new Set(referenceImageIds).size ||
+              assets.some((asset) => asset.ownerId !== user.id || asset.purpose !== 'job_reference')) {
+            return json({ error: 'One or more project reference images are not owned by your account.' }, 403)
+          }
+        }
         const [result] = await db.transaction(async (tx) => {
           const rows = await tx
             .insert(jobs)
-            .values({ ...data, ownerId: user.id })
+            .values({ ...data, referenceImageIds, ownerId: user.id })
             .returning()
           await tx
             .insert(auditEvents)
@@ -99,6 +122,17 @@ export default async (req: Request) => {
             })
           return rows
         })
+        const adminEmail = process.env.QAMIVO_ADMIN_EMAIL
+        if (adminEmail) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          await sendTransactionalEmail({
+            to: adminEmail,
+            subject: 'New project published on Qamivo',
+            html: brandedNoticeHtml('New project published', result.title, `${base}/jobs/${result.id}`),
+            eventType: 'job.created.admin',
+            idempotencyKey: `job-created-admin/${result.id}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
         return json(result, 201)
       }
       if (resource === 'jobs' && id) {
@@ -230,6 +264,8 @@ export default async (req: Request) => {
           skills: profiles.skills,
           category: profiles.category,
           country: profiles.country,
+          avatarKey: profiles.avatarKey,
+          avatarPosition: profiles.avatarPosition,
         })
         .from(profiles)
         .where(and(...conditions))
