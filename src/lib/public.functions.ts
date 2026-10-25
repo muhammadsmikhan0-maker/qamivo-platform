@@ -43,6 +43,8 @@ export const publicProfile = createServerFn({ method: 'GET' })
         skills: profiles.skills,
         category: profiles.category,
         country: profiles.country,
+        avatarKey: profiles.avatarKey,
+        avatarPosition: profiles.avatarPosition,
       })
       .from(profiles)
       .where(and(eq(profiles.username, data), eq(profiles.isPublic, true)))
