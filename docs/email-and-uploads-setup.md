@@ -18,6 +18,7 @@ In Netlify → Project configuration → Environment variables, add values scope
 | `QAMIVO_APP_URL` | Recommended | Canonical HTTPS application URL used in email links |
 | `RESEND_WEBHOOK_SECRET` | Yes for delivery states | Signing secret for the Resend webhook |
 | `QAMIVO_ADMIN_EMAIL` | Optional | Confirmed owner address for job-posting alerts and admin-only email test |
+| `QAMIVO_OTP_SECRET` | Yes for new account registration | At least 32 random characters; HMAC-signs OTP hashes and per-email rate-limit keys |
 
 Do not paste secret values into GitHub, issues, documentation, client-side code or this chat. After adding or changing function-scoped values, redeploy so the Functions runtime receives the new configuration.
 
@@ -35,13 +36,18 @@ The webhook verifies the timestamp and signature before changing an `email_event
 
 After configuration and redeploy, sign in with a verified account whose email matches `QAMIVO_ADMIN_EMAIL`, then issue a same-origin POST to `/api/email/test` while authenticated. The endpoint is restricted to that configured administrator email and reports provider acceptance separately from final delivery. It will return an error if provider settings are absent or the request fails; it must not be used as a public test endpoint.
 
-### Identity registration and recovery
+### Registration OTP and Identity recovery
 
-Netlify Identity handles its own confirmation and password-recovery links through the Identity provider/dashboard. Review the Identity settings at `https://app.netlify.com/projects/qamivo-platform/identity` and test registration, confirmation, recovery and reset on a Deploy Preview. Those built-in messages are separate from the Resend transactional sender above. Numeric OTP delivery is **not implemented** in the current app; no hardcoded or simulated OTP should be used.
+New registration is implemented as a custom six-digit email OTP flow served at `/api/auth/signup/start` and `/api/auth/signup/verify`. Codes are generated with Web Crypto, HMAC-hashed using `QAMIVO_OTP_SECRET`, expire after 10 minutes, allow at most five verification attempts, impose a 60-second resend delay and a per-email hourly limit, and are rate-limited by source IP at the Functions layer. The password is held only in the verification request and is never stored in the OTP challenge table. A Netlify Identity user is created only after the OTP is valid. Test this on a Deploy Preview before release.
+
+If any of `RESEND_API_KEY`, `QAMIVO_FROM_EMAIL` or a sufficiently long `QAMIVO_OTP_SECRET` is missing, new registration returns a visible configuration error instead of claiming success. After changing environment variables, redeploy the Functions.
+
+Existing account confirmation links and password recovery/email-change links remain Netlify Identity-managed. Review the Identity settings at `https://app.netlify.com/projects/qamivo-platform/identity` and test both the custom OTP flow and provider-managed recovery on a Deploy Preview. Numeric OTP is not a replacement for the recovery link in the current milestone.
 
 ## 2. Email events currently wired
 
-- Welcome email when a member creates their first profile, if a provider and sender are configured.
+- Welcome email after successful OTP registration/Identity signup, if the provider and sender are configured.
+- Throttled new-sign-in security notice (at most one per account per six-hour window), if configured.
 - Administrator notification after a project is published, if `QAMIVO_ADMIN_EMAIL` is set.
 - Project owner notification after a proposal is submitted.
 - Freelancer notification when the owner shortlists or declines a proposal.
@@ -73,7 +79,8 @@ The upload storage API has reserved purposes for portfolio, company logo, suppor
 - [ ] Sending domain verifies; SPF/DKIM configured from provider-generated values; DMARC policy reviewed.
 - [ ] `QAMIVO_FROM_EMAIL` and optional `QAMIVO_ADMIN_EMAIL` verified.
 - [ ] Webhook secret installed; successful signed `delivered` event observed.
-- [ ] Built-in Netlify Identity confirmation/recovery links tested end-to-end.
+- [ ] New registration OTP code delivery, expiry, wrong-code lockout, resend interval and successful Identity account creation tested end-to-end.
+- [ ] Existing Netlify Identity recovery and any legacy confirmation links tested end-to-end.
 - [ ] CI reports build, typecheck, lint and tests separately and pass.
 - [ ] Database migration applies successfully in Deploy Preview; no migration is manually applied to production.
 - [ ] Two-account messaging tests prove sender/recipient access and message persistence.
