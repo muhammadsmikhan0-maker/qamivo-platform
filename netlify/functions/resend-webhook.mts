@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { Config } from '@netlify/functions'
 import { database } from '../../db/index.js'
 import { emailEvents } from '../../db/schema.js'
@@ -15,6 +15,12 @@ function bytesToBase64(bytes: Uint8Array) {
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary)
 }
+function constantTimeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false
+  let mismatch = 0
+  for (let i = 0; i < left.length; i += 1) mismatch |= left.charCodeAt(i) ^ right.charCodeAt(i)
+  return mismatch === 0
+}
 async function verifySignature(req: Request, rawBody: string, secret: string) {
   const id = req.headers.get('svix-id')
   const timestamp = req.headers.get('svix-timestamp')
@@ -28,7 +34,7 @@ async function verifySignature(req: Request, rawBody: string, secret: string) {
   const expected = bytesToBase64(new Uint8Array(await crypto.subtle.sign('HMAC', key, signed)))
   return signatures.split(' ').some((entry) => {
     const [version, signature] = entry.split(',')
-    return version === 'v1' && signature === expected
+    return version === 'v1' && constantTimeEqual(signature || '', expected)
   })
 }
 export default async (req: Request) => {
@@ -53,8 +59,30 @@ export default async (req: Request) => {
     }
     const status = statusByType[payload.type]
     if (!status) return json({ received: true, updated: false })
+    const priority: Record<string, number> = {
+      sent: 1,
+      delivery_delayed: 2,
+      delivered: 3,
+      opened: 4,
+      clicked: 5,
+      bounced: 6,
+      complained: 7,
+    }
     await database().update(emailEvents).set({ status, errorCode: null })
-      .where(eq(emailEvents.providerId, providerId))
+      .where(and(
+        eq(emailEvents.providerId, providerId),
+        sql`CASE ${emailEvents.status}
+          WHEN 'pending' THEN 0
+          WHEN 'sent' THEN 1
+          WHEN 'delivery_delayed' THEN 2
+          WHEN 'delivered' THEN 3
+          WHEN 'opened' THEN 4
+          WHEN 'clicked' THEN 5
+          WHEN 'bounced' THEN 6
+          WHEN 'complained' THEN 7
+          ELSE -1
+        END <= ${priority[status]}`,
+      ))
     return json({ received: true, updated: true })
   } catch {
     return json({ error: 'Unable to process signed email event.' }, 400)
