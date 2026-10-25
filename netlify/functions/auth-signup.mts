@@ -249,11 +249,11 @@ export default async (req: Request) => {
     return json({ error: 'Endpoint not found.' }, 404)
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: 'Invalid JSON.' }, 400)
+    if (error instanceof Error && error.message === 'JSON required.') return json({ error: error.message }, 415)
+    if (error instanceof Error && error.message === 'Request is too large.') return json({ error: error.message }, 413)
     return json({
-      error: error instanceof Error && error.message === 'JSON required.'
-        ? error.message
-        : 'Registration is temporarily unavailable. No account creation was confirmed.',
-    }, error instanceof Error && error.message === 'JSON required.' ? 415 : 503)
+      error: 'Registration is temporarily unavailable. No account creation was confirmed.',
+    }, 503)
   }
 }
 
