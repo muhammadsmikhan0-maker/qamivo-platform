@@ -189,7 +189,7 @@ export default async (req: Request) => {
   } catch (error) {
     if (error instanceof ZodError) return json({ error: error.issues.map((i) => i.message).join(' ') }, 422)
     if (error instanceof SyntaxError) return json({ error: 'Invalid JSON.' }, 400)
-    return json({ error: error instanceof Error ? error.message : 'Messaging is temporarily unavailable.' }, 503)
+    return json({ error: 'Messaging is temporarily unavailable. Please try again.' }, 503)
   }
 }
 export const config: Config = {
