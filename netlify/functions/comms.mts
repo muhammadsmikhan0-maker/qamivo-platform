@@ -158,7 +158,7 @@ export default async (req: Request) => {
         const result = await sendTransactionalEmail({
           to: profile.email, subject, html, eventType: 'message.new',
           idempotencyKey: `message-notification/${message.id}/${member.memberId}`,
-        })
+        }).catch(() => ({ status: 'failed' as const }))
         notificationStatuses.push(result.status)
       }
 
