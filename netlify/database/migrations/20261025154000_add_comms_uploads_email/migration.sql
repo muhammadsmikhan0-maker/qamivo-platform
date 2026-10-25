@@ -71,3 +71,21 @@ CREATE TABLE "email_events" (
 );
 --> statement-breakpoint
 CREATE INDEX "email_events_status_created" ON "email_events" ("status","created_at");
+--> statement-breakpoint
+CREATE TABLE "verification_challenges" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "email" text NOT NULL,
+  "full_name" text NOT NULL,
+  "code_hash" text NOT NULL,
+  "status" text DEFAULT 'pending' NOT NULL,
+  "attempts" integer DEFAULT 0 NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "expires_at" timestamp with time zone NOT NULL,
+  "consumed_at" timestamp with time zone,
+  CONSTRAINT "verification_attempts_valid" CHECK ("attempts" >= 0 AND "attempts" <= 5),
+  CONSTRAINT "verification_status_valid" CHECK ("status" in ('pending','sent','failed','consumed','expired','locked','superseded'))
+);
+--> statement-breakpoint
+CREATE INDEX "verification_challenges_email_created" ON "verification_challenges" ("email","created_at");
+--> statement-breakpoint
+CREATE INDEX "verification_challenges_status_expires" ON "verification_challenges" ("status","expires_at");
