@@ -1,20 +1,10 @@
 import { admin } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
-import { z } from 'zod'
 import { database } from '../../db/index.js'
 import { rateLimits, verificationChallenges } from '../../db/schema.js'
+import { signupStartSchema, signupVerifySchema } from '../../src/lib/otp-validation.js'
 import { brandedNoticeHtml, sendTransactionalEmail } from '../shared/transactional-email.mjs'
-
-const startSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  fullName: z.string().trim().min(2).max(70),
-})
-const verifySchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  code: z.string().regex(/^\d{6}$/),
-  password: z.string().min(10).max(128),
-})
 
 function json(body: unknown, status = 200) {
   return Response.json(body, {
@@ -89,7 +79,7 @@ export default async (req: Request) => {
     const input = await parseBody(req)
 
     if (route === '/api/auth/signup/start') {
-      const parsed = startSchema.safeParse(input)
+      const parsed = signupStartSchema.safeParse(input)
       if (!parsed.success) {
         return json({ error: parsed.error.issues.map((item) => item.message).join(' ') }, 422)
       }
@@ -176,7 +166,7 @@ export default async (req: Request) => {
     }
 
     if (route === '/api/auth/signup/verify') {
-      const parsed = verifySchema.safeParse(input)
+      const parsed = signupVerifySchema.safeParse(input)
       if (!parsed.success) {
         return json({ error: parsed.error.issues.map((item) => item.message).join(' ') }, 422)
       }
