@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /account
+Disallow: /dashboard
+Disallow: /api/
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Sitemap: https://qamivo-platform.netlify.app/sitemap.xml
