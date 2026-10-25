@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs'
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
-import { and, arrayContains, eq, sql } from 'drizzle-orm'
+import { and, arrayContains, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { database } from '../../db/index.js'
 import { uploads, profiles, messages, conversationMembers, jobs, proposals } from '../../db/schema.js'
@@ -12,6 +12,7 @@ const purposes = new Set([
 ])
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const MAX_BYTES = 5 * 1024 * 1024
+function uploadStore() { return getStore(process.env.CONTEXT === 'production' ? 'qamivo-user-uploads' : 'qamivo-preview-user-uploads') }
 const uuid = z.string().uuid()
 
 function json(body: unknown, status = 200) {
@@ -32,6 +33,23 @@ export default async (req: Request) => {
   const url = new URL(req.url)
   const parts = url.pathname.replace(/^\/api\/uploads\/?/, '').split('/').filter(Boolean)
   const db = database()
+
+  if (req.method === 'GET' && parts.length === 0 && url.searchParams.has('jobId')) {
+    const user = await getUser()
+    if (!user) return json({ error: 'Sign in to view project reference images.' }, 401)
+    const jobId = uuid.safeParse(url.searchParams.get('jobId'))
+    if (!jobId.success) return json({ error: 'Project not found.' }, 404)
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId.data)).limit(1)
+    if (!job) return json({ error: 'Project not found.' }, 404)
+    const [proposal] = await db.select({ id: proposals.id }).from(proposals)
+      .where(and(eq(proposals.jobId, job.id), eq(proposals.freelancerId, user.id))).limit(1)
+    if (job.ownerId !== user.id && !proposal) return json({ error: 'Reference images are private to project participants.' }, 403)
+    const ids = job.referenceImageIds || []
+    if (!ids.length) return json([])
+    const assets = await db.select({ id: uploads.id, contentType: uploads.contentType, fileSize: uploads.fileSize })
+      .from(uploads).where(and(inArray(uploads.id, ids), eq(uploads.purpose, 'job_reference')))
+    return json(assets.map((asset) => ({ ...asset, url: `/api/uploads/${asset.id}` })))
+  }
 
   if (req.method === 'POST' && parts.length === 0) {
     if (!sameOrigin(req, url)) return json({ error: 'Same-origin uploads are required.' }, 403)
@@ -54,7 +72,7 @@ export default async (req: Request) => {
       const id = crypto.randomUUID()
       const storeKey = `${user.id}/${id}`
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: detected })
-      const store = getStore('qamivo-user-uploads')
+      const store = uploadStore()
       await store.set(storeKey, blob, { metadata: { uploadId: id, ownerId: user.id, purpose, contentType: detected } })
       try {
         const [asset] = await db.insert(uploads).values({
@@ -114,14 +132,14 @@ export default async (req: Request) => {
     const [profileRef] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.avatarKey, id)).limit(1)
     const [messageRef] = await db.select({ id: messages.id }).from(messages).where(eq(messages.attachmentId, id)).limit(1)
     if (profileRef || messageRef) return json({ error: 'This image is still in use. Remove it from its profile or message first.' }, 409)
-    await getStore('qamivo-user-uploads').delete(asset.storeKey)
+    await uploadStore().delete(asset.storeKey)
     await db.delete(uploads).where(eq(uploads.id, id))
     return json({ deleted: true })
   }
 
   if (req.method !== 'GET') return json({ error: 'Method not allowed.' }, 405)
   if (!permitted && !publicAsset) return json({ error: 'Upload not found.' }, 404)
-  const data = await getStore('qamivo-user-uploads').get(asset.storeKey, { type: 'arrayBuffer' })
+  const data = await uploadStore().get(asset.storeKey, { type: 'arrayBuffer' })
   if (data === null) return json({ error: 'Stored image is missing.' }, 404)
   return new Response(data, {
     headers: {
@@ -133,6 +151,6 @@ export default async (req: Request) => {
   })
 }
 export const config: Config = {
-  path: '/api/uploads/*',
+  path: ['/api/uploads', '/api/uploads/*'],
   rateLimit: { windowLimit: 20, windowSize: 60, aggregateBy: ['ip', 'domain'] },
 }
