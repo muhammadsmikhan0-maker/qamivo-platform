@@ -181,20 +181,22 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
   }, [])
 
   useEffect(() => {
-    void refreshConversations()
+    let active = true
+    queueMicrotask(() => {
+      if (active) void refreshConversations()
+    })
     const timer = window.setInterval(() => void refreshConversations(), 5000)
-    return () => window.clearInterval(timer)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
   }, [refreshConversations])
 
   useEffect(() => {
-    if (!file) {
-      setFilePreview('')
-      return
+    return () => {
+      if (filePreview) URL.revokeObjectURL(filePreview)
     }
-    const objectUrl = URL.createObjectURL(file)
-    setFilePreview(objectUrl)
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [file])
+  }, [filePreview])
 
   useEffect(() => {
     if (!activeId) {
@@ -262,6 +264,7 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
       setMessages((current) => [...current, result])
       setText('')
       setFile(null)
+      setFilePreview('')
       if (result.emailNotifications?.some((value) => value === 'not_configured' || value === 'recipient_email_unavailable')) {
         setStatus('Message saved. Email alerts are not fully configured yet; the in-app message is available.')
       } else if (result.emailNotifications?.some((value) => value === 'failed')) {
@@ -364,7 +367,17 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
                 <label htmlFor="chat-message">Your message</label>
                 <textarea className="field" id="chat-message" value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={3} placeholder="Write a clear, professional message…" />
                 <label htmlFor="chat-attachment">Attach an image (optional, max 5 MB)</label>
-                <input className="field" type="file" id="chat-attachment" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setFile(e.currentTarget.files?.[0] || null)} />
+                <input
+                  className="field"
+                  type="file"
+                  id="chat-attachment"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) => {
+                    const nextFile = e.currentTarget.files?.[0] || null
+                    setFile(nextFile)
+                    setFilePreview(nextFile ? URL.createObjectURL(nextFile) : '')
+                  }}
+                />
                 {filePreview && <img src={filePreview} alt="Selected image preview; not yet uploaded" style={{ maxWidth: 180, maxHeight: 140, objectFit: 'contain', borderRadius: 8 }} />}
                 <p className="muted">Images are validated and stored privately. The message and image become part of the conversation only after sending.</p>
                 <button className="button" disabled={pending || (!text.trim() && !file)}>{pending ? 'Sending…' : 'Send message'}</button>
