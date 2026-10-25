@@ -38,8 +38,8 @@ function WorkspacePage() {
           </div>
           <MessagingPanel
             jobOptions={Array.from(new Map([
-              ...result.data.jobs.map((job) => [job.id, { id: job.id, title: job.title }] as const),
-              ...result.data.proposals.filter((proposal) => !!proposal.jobId).map((proposal) => [proposal.jobId!, { id: proposal.jobId!, title: proposal.title || 'Project conversation' }] as const),
+              ...result.data.jobs.map((job) => [job.id, { id: job.id, title: job.title, isOwner: true }] as const),
+              ...result.data.proposals.filter((proposal) => !!proposal.jobId).map((proposal) => [proposal.jobId!, { id: proposal.jobId!, title: proposal.title || 'Project conversation', isOwner: false }] as const),
             ]).values())}
           />
           <h2 style={{ marginTop: 35 }}>Your projects</h2>
@@ -132,7 +132,7 @@ async function commsRequest<T>(path: string, method = 'GET', data?: unknown): Pr
   if (!response.ok) throw new Error(payload.error || 'Messaging is temporarily unavailable.')
   return payload as T
 }
-function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: string }[] }) {
+function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: string; isOwner: boolean }[] }) {
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeId, setActiveId] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -203,7 +203,8 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
     setStatus('')
     try {
       const result = await commsRequest<{ id: string }>('/api/comms/conversations', 'POST', {
-        recipientUsername, jobId: newConversationJobId, subject: 'Project conversation',
+        ...(jobOptions.find((job) => job.id === newConversationJobId)?.isOwner && recipientUsername.trim() ? { recipientUsername } : {}),
+        jobId: newConversationJobId, subject: 'Project conversation',
       })
       setActiveId(result.id)
       setRecipientUsername('')
@@ -270,12 +271,19 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
               <button
                 type="button"
                 key={item.id}
-                className={activeId === item.id ? 'record' : 'record'}
+                className="record"
                 onClick={() => { setActiveId(item.id); setError(''); setStatus('') }}
                 aria-pressed={activeId === item.id}
                 style={{ textAlign: 'left', width: '100%', cursor: 'pointer', border: activeId === item.id ? '2px solid #087fba' : undefined, background: activeId === item.id ? '#f2f8fc' : undefined }}
               >
-                <strong>{item.participantName}</strong>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {item.avatarUrl ? (
+                    <img src={item.avatarUrl} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  ) : (
+                    <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', color: '#34516b', fontWeight: 700, flexShrink: 0 }}>{item.participantName.slice(0, 1).toUpperCase()}</span>
+                  )}
+                  <strong>{item.participantName}</strong>
+                </span>
                 <span className="pill">{item.unreadCount ? `${item.unreadCount} unread` : 'Conversation'}</span>
                 <div className="meta"><span>{item.lastMessage || item.subject}</span></div>
               </button>
@@ -290,11 +298,16 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
                 {jobOptions.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
               </select>
             </div>
-            <div className="full">
-              <label htmlFor="message-recipient">Other member’s public username</label>
-              <input className="field" id="message-recipient" value={recipientUsername} onChange={(e) => setRecipientUsername(e.target.value)} pattern="[a-z0-9]+(-[a-z0-9]+)*" minLength={3} maxLength={32} placeholder="member-username" required />
-            </div>
-            <button className="button" disabled={pending || !jobOptions.length}>Start conversation</button>
+            {jobOptions.find((job) => job.id === newConversationJobId)?.isOwner ? (
+              <div className="full">
+                <label htmlFor="message-recipient">Freelancer’s public username</label>
+                <input className="field" id="message-recipient" value={recipientUsername} onChange={(e) => setRecipientUsername(e.target.value)} pattern="[a-z0-9]+(-[a-z0-9]+)*" minLength={3} maxLength={32} placeholder="member-username" required />
+                <p className="muted">The other member must have submitted a proposal for this project.</p>
+              </div>
+            ) : newConversationJobId ? (
+              <p className="muted full">The conversation will be with the owner of the project you applied to.</p>
+            ) : null}
+            <button className="button" disabled={pending || !newConversationJobId || (!!jobOptions.find((job) => job.id === newConversationJobId)?.isOwner && !recipientUsername.trim())}>Start conversation</button>
           </form>
           {!jobOptions.length && <p className="muted">Post a project or submit a proposal first to enable project-linked messaging.</p>}
         </aside>
