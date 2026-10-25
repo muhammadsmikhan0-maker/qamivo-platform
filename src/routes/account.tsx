@@ -35,10 +35,15 @@ function ProfileEditor() {
   const [photoError, setPhotoError] = useState('')
   const [photoStatus, setPhotoStatus] = useState('')
   useEffect(() => {
-    if (result.data?.profile) {
+    let active = true
+    queueMicrotask(() => {
+      if (!active || !result.data?.profile) return
       setIsPublic(!!result.data.profile.isPublic)
       setAvatarKey(result.data.profile.avatarKey || null)
       setAvatarPosition(result.data.profile.avatarPosition || 'center')
+    })
+    return () => {
+      active = false
     }
   }, [result.data])
   async function submit(e: React.FormEvent<HTMLFormElement>) {
