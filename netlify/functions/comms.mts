@@ -113,13 +113,16 @@ export default async (req: Request) => {
         if (shared) return json({ id: existing.id, subject: 'Project conversation' }, 200)
       }
 
-      const [conversation] = await db.insert(conversations).values({
-        jobId: job.id, subject: input.subject,
-      }).returning()
-      await db.insert(conversationMembers).values([
-        { conversationId: conversation.id, memberId: user.id },
-        { conversationId: conversation.id, memberId: recipientId },
-      ])
+      const conversation = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(conversations).values({
+          jobId: job.id, subject: input.subject,
+        }).returning()
+        await tx.insert(conversationMembers).values([
+          { conversationId: created.id, memberId: user.id },
+          { conversationId: created.id, memberId: recipientId },
+        ])
+        return created
+      })
       return json({ id: conversation.id, subject: conversation.subject }, 201)
     }
 
@@ -151,16 +154,19 @@ export default async (req: Request) => {
           return json({ error: 'The selected image is not available to attach.' }, 403)
         }
       }
-      const [message] = await db.insert(messages).values({
-        conversationId, senderId: user.id, body: input.body, attachmentId: input.attachmentId || null,
-      }).returning()
-      await db.update(conversationMembers)
-        .set({ unreadCount: sql`${conversationMembers.unreadCount} + 1` })
-        .where(and(eq(conversationMembers.conversationId, conversationId), ne(conversationMembers.memberId, user.id)))
-
-      const otherMembers = await db.select({ memberId: conversationMembers.memberId })
-        .from(conversationMembers)
-        .where(and(eq(conversationMembers.conversationId, conversationId), ne(conversationMembers.memberId, user.id)))
+      const saved = await db.transaction(async (tx) => {
+        const [message] = await tx.insert(messages).values({
+          conversationId, senderId: user.id, body: input.body, attachmentId: input.attachmentId || null,
+        }).returning()
+        await tx.update(conversationMembers)
+          .set({ unreadCount: sql`${conversationMembers.unreadCount} + 1` })
+          .where(and(eq(conversationMembers.conversationId, conversationId), ne(conversationMembers.memberId, user.id)))
+        const otherMembers = await tx.select({ memberId: conversationMembers.memberId })
+          .from(conversationMembers)
+          .where(and(eq(conversationMembers.conversationId, conversationId), ne(conversationMembers.memberId, user.id)))
+        return { message, otherMembers }
+      })
+      const { message, otherMembers } = saved
       const notificationStatuses: string[] = []
       const [senderProfile] = await db.select({ name: profiles.name })
         .from(profiles).where(eq(profiles.id, user.id)).limit(1)
