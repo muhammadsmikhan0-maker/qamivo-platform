@@ -104,9 +104,7 @@ function WorkspacePage() {
             </div>
           )}
           <div className="notice">
-            Shortlisting is an expression of interest. Contracts, private
-            messages, delivery and all payment processing remain planned. No
-            balance or earnings are represented in this workspace.
+            Shortlisting is an expression of interest. Contracts, project delivery and payment processing remain planned. No balance or earnings are represented in this workspace.
           </div>
         </>
       )}
@@ -328,7 +326,20 @@ function MessagingPanel({ jobOptions }: { jobOptions: { id: string; title: strin
         <div className="detail-main">
           {activeId ? (
             <>
-              <h3>{conversations.find((item) => item.id === activeId)?.participantName || 'Conversation'}</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                {conversations.find((item) => item.id === activeId)?.avatarUrl ? (
+                  <img
+                    src={conversations.find((item) => item.id === activeId)?.avatarUrl || ''}
+                    alt=""
+                    style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <span aria-hidden="true" style={{ width: 42, height: 42, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', fontWeight: 700 }}>
+                    {(conversations.find((item) => item.id === activeId)?.participantName || 'Q').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <h3 style={{ margin: 0 }}>{conversations.find((item) => item.id === activeId)?.participantName || 'Conversation'}</h3>
+              </div>
               <div aria-live="polite" aria-label="Conversation messages" style={{ display: 'grid', gap: 12, maxHeight: 440, overflowY: 'auto', padding: 12, border: '1px solid #dbe4ee', borderRadius: 12, background: '#f8fafc' }}>
                 {!messages.length && <p className="muted">No messages yet. Start the conversation below.</p>}
                 {messages.map((message) => (
