@@ -23,6 +23,20 @@ function WorkspacePage() {
   return (
     <>
       <Feedback {...result} />
+      {result.data?.profile && !result.loading && !result.error && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
+          {result.data.profile.avatarKey ? (
+            <img src={`/api/uploads/${result.data.profile.avatarKey}`} alt="Your profile picture" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', objectPosition: result.data.profile.avatarPosition || 'center' }} />
+          ) : (
+            <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', fontSize: 24, fontWeight: 700 }}>{result.data.profile.name.slice(0, 1).toUpperCase()}</span>
+          )}
+          <div>
+            <strong>{result.data.profile.name}</strong>
+            <div className="muted">{result.data.profile.headline}</div>
+            <a className="text-link" href="/account">Edit profile and picture →</a>
+          </div>
+        </div>
+      )}
       {result.data && !result.loading && !result.error && (
         <>
           <div className="inline-actions">
