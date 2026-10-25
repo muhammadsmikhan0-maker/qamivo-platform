@@ -95,22 +95,50 @@ export function Directory({ services = false }: { services?: boolean }) {
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
                   {p.avatarKey ? (
-                    <img src={`/api/uploads/${p.avatarKey}`} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', objectPosition: p.avatarPosition || 'center', flexShrink: 0 }} />
+                    <img
+                      src={`/api/uploads/${p.avatarKey}`}
+                      alt=""
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        objectPosition: p.avatarPosition || 'center',
+                        flexShrink: 0,
+                      }}
+                    />
                   ) : (
-                    <span aria-hidden="true" style={{ width: 56, height: 56, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#e7eef5', color: '#34516b', fontWeight: 700, fontSize: 22, flexShrink: 0 }}>{p.name.slice(0, 1).toUpperCase()}</span>
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: '#e7eef5',
+                        color: '#34516b',
+                        fontWeight: 700,
+                        fontSize: 22,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {p.name.slice(0, 1).toUpperCase()}
+                    </span>
                   )}
                   <div style={{ minWidth: 0 }}>
-                <h3>
-                  {p.name}{' '}
-                  <ArrowUpRight size={16} style={{ display: 'inline' }} />
-                </h3>
-                <strong>{p.headline}</strong>
-                <p>
-                  {p.bio.slice(0, 180)}
-                  {p.bio.length > 180 ? '…' : ''}
-                </p>
-                <div className="meta">
-                  {p.country} · {p.skills}
+                    <h3>
+                      {p.name}{' '}
+                      <ArrowUpRight size={16} style={{ display: 'inline' }} />
+                    </h3>
+                    <strong>{p.headline}</strong>
+                    <p>
+                      {p.bio.slice(0, 180)}
+                      {p.bio.length > 180 ? '…' : ''}
+                    </p>
+                    <div className="meta">
+                      {p.country} · {p.skills}
+                    </div>
                   </div>
                 </div>
               </a>
