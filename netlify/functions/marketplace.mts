@@ -75,6 +75,8 @@ export default async (req: Request) => {
         )
       if (resource === 'profile' && req.method === 'PUT') {
         const data = profileSchema.parse(body)
+        const [existingProfile] = await db.select({ id: profiles.id })
+          .from(profiles).where(eq(profiles.id, user.id)).limit(1)
         if (data.avatarKey) {
           const [asset] = await db.select().from(uploads).where(eq(uploads.id, data.avatarKey)).limit(1)
           if (!asset || asset.ownerId !== user.id || asset.purpose !== 'avatar') {
@@ -96,6 +98,20 @@ export default async (req: Request) => {
             set: { ...profileData, updatedAt: new Date() },
           })
           .returning()
+        if (!existingProfile && user.email) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          await sendTransactionalEmail({
+            to: user.email,
+            subject: 'Welcome to Qamivo',
+            html: brandedNoticeHtml(
+              'Welcome to Qamivo',
+              'Your professional profile is ready. Explore projects and opportunities, and keep your account information up to date.',
+              `${base}/dashboard`,
+            ),
+            eventType: 'account.welcome',
+            idempotencyKey: `account-welcome/${user.id}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
         return json(result[0])
       }
       if (resource === 'jobs' && !id && req.method === 'POST') {
@@ -382,6 +398,8 @@ export default async (req: Request) => {
     if (resource === 'me') {
       const user = await getUser()
       if (!user) return json({ error: 'Sign in to view your workspace.' }, 401)
+      await db.update(profiles).set({ email: user.email || null })
+        .where(eq(profiles.id, user.id))
       const [profile] = await db
         .select()
         .from(profiles)
