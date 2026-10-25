@@ -221,7 +221,8 @@ export default async (req: Request) => {
         const data = z
           .object({ status: z.enum(['shortlisted', 'rejected']) })
           .parse(body)
-        return await db.transaction(async (tx) => {
+        let proposalDecision: { email: string | null; jobTitle: string; proposalId: string; status: 'shortlisted' | 'rejected' } | null = null
+        const response = await db.transaction(async (tx) => {
           const [entry] = await tx
             .select({ proposal: proposals, job: jobs })
             .from(proposals)
@@ -250,8 +251,23 @@ export default async (req: Request) => {
               action: `proposal.${data.status}`,
               recordId: id,
             })
+          const [recipient] = await tx.select({ email: profiles.email })
+            .from(profiles).where(eq(profiles.id, entry.proposal.freelancerId)).limit(1)
+          proposalDecision = { email: recipient?.email || null, jobTitle: entry.job.title, proposalId: id, status: data.status }
           return json(result)
         })
+        if (proposalDecision?.email && response.status === 200) {
+          const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
+          const label = proposalDecision.status === 'shortlisted' ? 'Your proposal was shortlisted' : 'Your proposal was declined'
+          await sendTransactionalEmail({
+            to: proposalDecision.email,
+            subject: label + ' on Qamivo',
+            html: brandedNoticeHtml(label, `Project: ${proposalDecision.jobTitle}`, `${base}/dashboard`),
+            eventType: `proposal.${proposalDecision.status}`,
+            idempotencyKey: `proposal-decision/${proposalDecision.proposalId}/${proposalDecision.status}`,
+          }).catch(() => ({ status: 'failed' as const }))
+        }
+        return response
       }
       return json({ error: 'Operation not found.' }, 404)
     }
