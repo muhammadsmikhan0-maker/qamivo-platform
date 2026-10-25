@@ -204,14 +204,20 @@ export default async (req: Request) => {
           }
           return json({ error: 'Operation not found.' }, 404)
         })
-        if (proposalNotification?.email && response.status === 201) {
+        const notification = proposalNotification as {
+          email: string | null
+          jobTitle: string
+          jobId: string
+          proposalId: string
+        } | null
+        if (notification?.email && response.status === 201) {
           const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
           await sendTransactionalEmail({
-            to: proposalNotification.email,
+            to: notification.email,
             subject: 'A new proposal was submitted on Qamivo',
-            html: brandedNoticeHtml('New proposal received', `A freelancer submitted a proposal for: ${proposalNotification.jobTitle}`, `${base}/jobs/${proposalNotification.jobId}`),
+            html: brandedNoticeHtml('New proposal received', `A freelancer submitted a proposal for: ${notification.jobTitle}`, `${base}/jobs/${notification.jobId}`),
             eventType: 'proposal.submitted',
-            idempotencyKey: `proposal-submitted/${proposalNotification.proposalId}`,
+            idempotencyKey: `proposal-submitted/${notification.proposalId}`,
           }).catch(() => ({ status: 'failed' as const }))
         }
         return response
@@ -256,15 +262,21 @@ export default async (req: Request) => {
           proposalDecision = { email: recipient?.email || null, jobTitle: entry.job.title, proposalId: id, status: data.status }
           return json(result)
         })
-        if (proposalDecision?.email && response.status === 200) {
+        const decision = proposalDecision as {
+          email: string | null
+          jobTitle: string
+          proposalId: string
+          status: 'shortlisted' | 'rejected'
+        } | null
+        if (decision?.email && response.status === 200) {
           const base = process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app'
-          const label = proposalDecision.status === 'shortlisted' ? 'Your proposal was shortlisted' : 'Your proposal was declined'
+          const label = decision.status === 'shortlisted' ? 'Your proposal was shortlisted' : 'Your proposal was declined'
           await sendTransactionalEmail({
-            to: proposalDecision.email,
+            to: decision.email,
             subject: label + ' on Qamivo',
-            html: brandedNoticeHtml(label, `Project: ${proposalDecision.jobTitle}`, `${base}/dashboard`),
-            eventType: `proposal.${proposalDecision.status}`,
-            idempotencyKey: `proposal-decision/${proposalDecision.proposalId}/${proposalDecision.status}`,
+            html: brandedNoticeHtml(label, `Project: ${decision.jobTitle}`, `${base}/dashboard`),
+            eventType: `proposal.${decision.status}`,
+            idempotencyKey: `proposal-decision/${decision.proposalId}/${decision.status}`,
           }).catch(() => ({ status: 'failed' as const }))
         }
         return response
