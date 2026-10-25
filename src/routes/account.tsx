@@ -104,6 +104,8 @@ function ProfileEditor() {
                 setPhotoError('Choose an image no larger than 5 MB.')
                 return
               }
+              const previousKey = avatarKey
+              const savedKey = result.data?.profile?.avatarKey || null
               const localPreview = URL.createObjectURL(file)
               setPhotoPreview(localPreview)
               setPhotoPending(true)
@@ -117,6 +119,12 @@ function ProfileEditor() {
                 setAvatarKey(payload.id)
                 setPhotoPreview(`/api/uploads/${payload.id}`)
                 URL.revokeObjectURL(localPreview)
+                if (previousKey && previousKey !== savedKey && previousKey !== payload.id) {
+                  await fetch(`/api/uploads/${previousKey}`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                  }).catch(() => undefined)
+                }
                 setPhotoStatus('Image stored privately. Click Save profile to attach it to your account.')
               } catch (error) {
                 URL.revokeObjectURL(localPreview)
@@ -138,7 +146,19 @@ function ProfileEditor() {
           </select>
         </div>
         {(avatarKey || photoPreview) && (
-          <button type="button" className="button secondary" onClick={() => { setAvatarKey(null); setPhotoPreview(''); setPhotoStatus('Picture removal will apply after you save the profile.') }}>
+          <button type="button" className="button secondary" onClick={async () => {
+            const currentKey = avatarKey
+            const savedKey = result.data?.profile?.avatarKey || null
+            setAvatarKey(null)
+            setPhotoPreview('')
+            setPhotoStatus('Picture removal will apply after you save the profile.')
+            if (currentKey && currentKey !== savedKey) {
+              await fetch(`/api/uploads/${currentKey}`, {
+                method: 'DELETE',
+                credentials: 'same-origin',
+              }).catch(() => undefined)
+            }
+          }}>
             Remove picture
           </button>
         )}
