@@ -120,7 +120,7 @@ export default async (req: Request) => {
       if (job.id) {
         const [ownerOrProposal] = await db.select({ id: jobs.id }).from(jobs)
           .leftJoin(proposals, and(eq(proposals.jobId, jobs.id), eq(proposals.freelancerId, user.id)))
-          .where(and(eq(jobs.id, job.id), sql`${jobs.ownerId} = ${user.id} OR ${proposals.id} IS NOT NULL`)).limit(1)
+          .where(and(eq(jobs.id, job.id), sql`(${jobs.ownerId} = ${user.id} OR ${proposals.id} IS NOT NULL)`)).limit(1)
         permitted = !!ownerOrProposal
       }
     }
