@@ -51,10 +51,20 @@ function WorkspacePage() {
             </a>
           </div>
           <MessagingPanel
-            jobOptions={Array.from(new Map([
-              ...result.data.jobs.map((job) => [job.id, { id: job.id, title: job.title, isOwner: true }] as const),
-              ...result.data.proposals.filter((proposal) => !!proposal.jobId).map((proposal) => [proposal.jobId!, { id: proposal.jobId!, title: proposal.title || 'Project conversation', isOwner: false }] as const),
-            ]).values())}
+            jobOptions={[
+              ...result.data.jobs.map((job) => ({
+                id: job.id,
+                title: job.title,
+                isOwner: true,
+              })),
+              ...result.data.proposals
+                .filter((proposal) => !!proposal.jobId)
+                .map((proposal) => ({
+                  id: proposal.jobId!,
+                  title: proposal.title || 'Project conversation',
+                  isOwner: false,
+                })),
+            ]}
           />
           <h2 style={{ marginTop: 35 }}>Your projects</h2>
           {!result.data.jobs.length ? (
