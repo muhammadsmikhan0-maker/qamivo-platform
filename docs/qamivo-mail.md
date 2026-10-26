@@ -52,6 +52,6 @@ Send either html or text, or both. The current release accepts up to ten recipie
 
 ## Limitations
 
-This is an early-access transactional email API, not a bulk marketing platform. There is no independent SMTP infrastructure, bounce-management UI beyond provider event status, inbound mailbox, contact list, campaign scheduler, suppression-management UI, tenant billing, or per-tenant throughput quota. The Netlify function has platform rate limiting, but production use still needs tenant quotas and abuse monitoring. Configure and test the provider before sending real customer mail.
+This is an early-access transactional email API, not a bulk marketing platform. There is no independent SMTP infrastructure, bounce-management UI beyond provider event status, inbound mailbox, contact list, campaign scheduler, suppression-management UI, tenant billing, or per-tenant throughput quota. The Netlify function has platform IP/domain rate limiting plus an application guard of 100 send requests per workspace per rolling hour. Production use still needs stronger abuse monitoring and atomic quota enforcement under concurrent load. Configure and test the provider before sending real customer mail.
 
 Validate the feature in a deploy preview with the provider key configured: key creation/revocation, duplicate idempotency requests, domain ownership, valid/invalid DNS status, real recipient send, provider errors, signed webhook events and cross-workspace access.
