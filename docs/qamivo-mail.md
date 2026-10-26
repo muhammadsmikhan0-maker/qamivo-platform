@@ -5,7 +5,7 @@ Qamivo Mail is the first-party email API and developer dashboard within Qamivo. 
 ## Current architecture
 
 - Authenticated dashboard at /mail, protected by the existing Netlify Identity session and verified-email gate.
-- Server-only provider integration using RESEND_API_KEY. The key is never returned to the client.
+- Server-only provider integration: RESEND_API_KEY is a sending-access key; RESEND_DOMAIN_API_KEY is a separate full-access key used only by the server to register and verify domains. Neither key is returned to the client.
 - Workspace API keys are generated with cryptographic randomness. Only a SHA-256 digest and non-secret prefix are stored; the raw key is returned once on creation.
 - Domain registration and verification are delegated to the provider. Qamivo stores ownership, verification state, and provider-generated DNS records. A sender can be used only by the workspace that owns the exact verified domain.
 - Email requests are validated, logged without body content, constrained to ten recipients, and idempotent when an Idempotency-Key is supplied.
@@ -16,7 +16,8 @@ Qamivo Mail is the first-party email API and developer dashboard within Qamivo. 
 
 Set these as Netlify environment variables with the Functions scope, then redeploy:
 
-- RESEND_API_KEY — a server-side Resend API key with permission to send email and manage domains. Never put this value in source code.
+- RESEND_API_KEY — a Resend sending-access API key; it may be account-wide or restricted to a single provider-verified domain. Never put this value in source code.
+- RESEND_DOMAIN_API_KEY — a separate Resend full-access API key used only by server-side calls to create/check/verify domains. Store it as a secret with Functions scope and never expose it to the browser. This key’s permissions are broader, so use a dedicated Resend account for Qamivo Mail where practical.
 - QAMIVO_APP_URL — canonical HTTPS URL, recommended as https://qamivo-platform.netlify.app.
 - RESEND_WEBHOOK_SECRET — the signing secret for a Resend webhook targeting https://qamivo-platform.netlify.app/api/webhooks/resend. Subscribe to the supported sent, delivered, delayed, bounced, complained, opened and clicked events.
 
