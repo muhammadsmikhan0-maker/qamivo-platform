@@ -65,13 +65,12 @@ async function providerRequest(path: string, init: RequestInit = {}): Promise<Js
   if (!key) throw new MailError('The Resend provider is not configured. Ask the site owner to add RESEND_API_KEY in Netlify Function environment variables.', 503, 'provider_not_configured')
   let response: Response
   try {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', 'Bearer ' + key)
+    headers.set('Content-Type', 'application/json')
     response = await fetch('https://api.resend.com' + path, {
       ...init,
-      headers: {
-        Authorization: 'Bearer ' + key,
-        'Content-Type': 'application/json',
-        ...(init.headers || {}),
-      },
+      headers,
     })
   } catch {
     throw new MailError('The email provider could not be reached. No successful send was recorded.', 502, 'provider_unreachable')
