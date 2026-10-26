@@ -49,7 +49,7 @@ type MailEmail = {
   createdAt: string
 }
 type MailDashboard = {
-  provider: { name: string; configured: boolean }
+  provider: { name: string; configured: boolean; domainManagementConfigured: boolean }
   transactionalSenderConfigured: boolean
   stats: {
     activeKeys: number
@@ -245,7 +245,10 @@ function MailConsole() {
         {notice && <div className="notice success" role="status">{notice}</div>}
 
         {!data?.provider.configured && (
-          <div className="mail-warning"><AlertTriangle size={20} /><div><strong>Sending provider is not configured</strong><p>Add RESEND_API_KEY as a secret in Netlify Function environment variables and redeploy. Qamivo Mail will not claim a message was sent until the provider accepts it.</p></div></div>
+          <div className="mail-warning"><AlertTriangle size={20} /><div><strong>Sending provider is not configured</strong><p>Add a Resend sending-access key as the secret RESEND_API_KEY in Netlify Function environment variables, then redeploy. Qamivo Mail will not claim a message was sent until the provider accepts it.</p></div></div>
+        )}
+        {data?.provider.configured && !data.provider.domainManagementConfigured && (
+          <div className="mail-warning"><AlertTriangle size={20} /><div><strong>Domain management is not configured</strong><p>Add a separate Resend full-access key as the secret RESEND_DOMAIN_API_KEY in Netlify Function environment variables, then redeploy. This credential is used only by server-side domain registration and verification calls.</p></div></div>
         )}
 
         {tab === 'overview' && data && (
@@ -260,7 +263,7 @@ function MailConsole() {
             <section className="mail-card">
               <div className="mail-card-title"><div><h3>Get started</h3><p>Set up a sender domain, then create a Qamivo Mail key.</p></div><span className="mail-icon-box"><ShieldCheck size={20} /></span></div>
               <div className="mail-checklist">
-                <div><span className={data.provider.configured ? 'complete' : ''}>{data.provider.configured ? <Check size={15} /> : '1'}</span><div><strong>Connect the delivery provider</strong><p>{data.provider.configured ? 'Resend API is available to server functions.' : 'Add RESEND_API_KEY in Netlify; keep its value secret.'}</p></div></div>
+                <div><span className={data.provider.configured ? 'complete' : ''}>{data.provider.configured ? <Check size={15} /> : '1'}</span><div><strong>Connect the delivery provider</strong><p>{data.provider.configured ? 'Resend API is available to server functions.' : 'Add a Resend sending-access key as RESEND_API_KEY; keep it secret.'}</p></div></div>
                 <div><span className={data.stats.verifiedDomains > 0 ? 'complete' : ''}>{data.stats.verifiedDomains > 0 ? <Check size={15} /> : '2'}</span><div><strong>Verify your sending domain</strong><p>{data.stats.verifiedDomains > 0 ? 'At least one domain is verified.' : 'Add a domain and publish the exact SPF/DKIM records provided by Resend.'}</p><button className="mail-text-action" onClick={() => setTab('domains')}>Manage domains →</button></div></div>
                 <div><span className={data.stats.activeKeys > 0 ? 'complete' : ''}>{data.stats.activeKeys > 0 ? <Check size={15} /> : '3'}</span><div><strong>Create an application API key</strong><p>Use this key in your server-side code to call the Qamivo Mail API.</p><button className="mail-text-action" onClick={() => setTab('keys')}>Manage API keys →</button></div></div>
               </div>
@@ -288,12 +291,13 @@ function MailConsole() {
             <div className="mail-heading-row"><div><div className="eyebrow blue">SENDER AUTHENTICATION</div><h2>Domains</h2><p>Add a domain you control. Only verified domains can be used as a sender.</p></div></div>
             <section className="mail-card">
               <h3>Add a sending domain</h3><p className="muted">Qamivo asks Resend to register this domain and displays the exact DNS records returned by the provider.</p>
-              <form className="mail-domain-form" onSubmit={addDomain}><input className="field" type="text" autoCapitalize="none" spellCheck={false} value={domainName} onChange={(e) => setDomainName(e.target.value)} placeholder="example.com" aria-label="Domain name" required /><button className="button" disabled={pending || !data.provider.configured}><Plus size={16} /> Add domain</button></form>
-              {!data.provider.configured && <p className="muted">Configure RESEND_API_KEY before adding domains.</p>}
+              <form className="mail-domain-form" onSubmit={addDomain}><input className="field" type="text" autoCapitalize="none" spellCheck={false} value={domainName} onChange={(e) => setDomainName(e.target.value)} placeholder="example.com" aria-label="Domain name" required /><button className="button" disabled={pending || !data.provider.configured || !data.provider.domainManagementConfigured}><Plus size={16} /> Add domain</button></form>
+              {!data.provider.configured && <p className="muted">Configure RESEND_API_KEY (sending access) before enabling outbound email.</p>}
+              {!data.provider.domainManagementConfigured && <p className="muted">Configure RESEND_DOMAIN_API_KEY (full access, server-only) before adding or verifying domains.</p>}
             </section>
             {!data.domains.length ? <div className="empty-state"><Globe size={28} /><h3>No domains yet</h3><p>Add a domain to receive provider-generated DNS instructions.</p></div> : data.domains.map((domain) => (
               <section className="mail-card" key={domain.id}>
-                <div className="mail-domain-head"><div><h3>{domain.domain}</h3><p className="muted">Added {new Date(domain.createdAt).toLocaleString()}</p></div><StatusPill status={domain.status} /><button className="button secondary small" disabled={pending || busyId === domain.id || !data.provider.configured} onClick={() => void verifyDomain(domain)}><RefreshCw size={15} /> {busyId === domain.id ? 'Checking…' : 'Verify DNS'}</button></div>
+                <div className="mail-domain-head"><div><h3>{domain.domain}</h3><p className="muted">Added {new Date(domain.createdAt).toLocaleString()}</p></div><StatusPill status={domain.status} /><button className="button secondary small" disabled={pending || busyId === domain.id || !data.provider.domainManagementConfigured} onClick={() => void verifyDomain(domain)}><RefreshCw size={15} /> {busyId === domain.id ? 'Checking…' : 'Verify DNS'}</button></div>
                 <p className="muted">Publish the record details at your domain’s authoritative DNS provider. Keep existing mail records; add only the records shown here.</p>
                 <DnsTable records={domain.dnsRecords} />
               </section>
