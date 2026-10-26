@@ -29,10 +29,6 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function appUrl() {
-  return (process.env.QAMIVO_APP_URL || 'https://qamivo-platform.netlify.app').replace(/\/+$/, '')
-}
-
 function providerKey() {
   return process.env.RESEND_API_KEY?.trim() || ''
 }
@@ -360,8 +356,13 @@ export default async (request: Request) => {
       })
       const current = await providerRequest('/domains/' + encodeURIComponent(domain.providerDomainId), { method: 'GET', headers: {} })
       const status = typeof current.status === 'string' ? current.status : 'pending'
-      let dnsRecords = domain.dnsRecords
-      try { dnsRecords = JSON.stringify(Array.isArray(current.records) ? current.records : JSON.parse(domain.dnsRecords)) } catch { /* keep prior provider DNS records */ }
+      const dnsRecords = (() => {
+        try {
+          return JSON.stringify(Array.isArray(current.records) ? current.records : JSON.parse(domain.dnsRecords))
+        } catch {
+          return domain.dnsRecords
+        }
+      })()
       const [updated] = await db.update(mailDomains).set({
         status,
         dnsRecords,
