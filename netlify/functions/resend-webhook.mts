@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { Config } from '@netlify/functions'
 import { database } from '../../db/index.js'
-import { emailEvents } from '../../db/schema.js'
+import { emailEvents, mailMessages } from '../../db/schema.js'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -74,6 +74,22 @@ export default async (req: Request) => {
         sql`CASE ${emailEvents.status}
           WHEN 'pending' THEN 0
           WHEN 'sent' THEN 1
+          WHEN 'delivery_delayed' THEN 2
+          WHEN 'delivered' THEN 3
+          WHEN 'opened' THEN 4
+          WHEN 'clicked' THEN 5
+          WHEN 'bounced' THEN 6
+          WHEN 'complained' THEN 7
+          ELSE -1
+        END <= ${priority[status]}`,
+      ))
+
+    await database().update(mailMessages).set({ status, errorCode: null })
+      .where(and(
+        eq(mailMessages.providerId, providerId),
+        sql`CASE ${mailMessages.status}
+          WHEN 'sending' THEN 0
+          WHEN 'accepted' THEN 1
           WHEN 'delivery_delayed' THEN 2
           WHEN 'delivered' THEN 3
           WHEN 'opened' THEN 4
