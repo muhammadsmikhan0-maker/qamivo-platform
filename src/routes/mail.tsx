@@ -126,7 +126,13 @@ function MailConsole() {
   useEffect(() => { void refresh() }, [refresh])
 
   const verifiedDomains = useMemo(() => data?.domains.filter((domain) => domain.status === 'verified') || [], [data])
-  const generatedCurl = 'curl -X POST https://qamivo-platform.netlify.app/api/mail/v1/emails \\\n  -H "Authorization: Bearer qm_live_YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: order-123-welcome" \\\n  -d \\'{"from":"hello@your-verified-domain.com","to":["customer@example.com"],"subject":"Your order is confirmed","text":"Thank you for your order."}\\''
+  const generatedCurl = [
+    'curl -X POST https://qamivo-platform.netlify.app/api/mail/v1/emails',
+    '  -H "Authorization: Bearer qm_live_YOUR_API_KEY"',
+    '  -H "Content-Type: application/json"',
+    '  -H "Idempotency-Key: order-123-welcome"',
+    "  -d '{\"from\":\"hello@your-verified-domain.com\",\"to\":[\"customer@example.com\"],\"subject\":\"Your order is confirmed\",\"text\":\"Thank you for your order.\"}'",
+  ].join('\\n')
 
   async function action<T>(run: () => Promise<T>, successMessage: string, after?: (value: T) => void) {
     setPending(true)
