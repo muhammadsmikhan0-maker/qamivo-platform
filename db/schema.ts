@@ -210,3 +210,61 @@ export const verificationChallenges = pgTable(
     check('verification_status_valid', sql`${t.status} in ('pending','sent','failed','consumed','expired','locked','superseded')`),
   ],
 )
+
+
+export const mailApiKeys = pgTable(
+  'mail_api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: text('owner_id').notNull(),
+    name: text('name').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    keyHash: text('key_hash').notNull().unique(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('mail_api_keys_owner_created').on(t.ownerId, t.createdAt),
+  ],
+)
+
+export const mailDomains = pgTable(
+  'mail_domains',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: text('owner_id').notNull(),
+    domain: text('domain').notNull(),
+    providerDomainId: text('provider_domain_id').notNull().unique(),
+    status: text('status').notNull().default('pending'),
+    dnsRecords: text('dns_records').notNull().default('[]'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('mail_domains_domain_unique').on(t.domain),
+    index('mail_domains_owner_created').on(t.ownerId, t.createdAt),
+  ],
+)
+
+export const mailMessages = pgTable(
+  'mail_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: text('owner_id').notNull(),
+    providerId: text('provider_id'),
+    fromEmail: text('from_email').notNull(),
+    recipients: text('recipients').array().notNull(),
+    subject: text('subject').notNull(),
+    status: text('status').notNull().default('sending'),
+    errorCode: text('error_code'),
+    idempotencyKey: text('idempotency_key'),
+    requestHash: text('request_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('mail_messages_owner_idempotency_unique').on(t.ownerId, t.idempotencyKey),
+    index('mail_messages_owner_created').on(t.ownerId, t.createdAt),
+    index('mail_messages_provider_id').on(t.providerId),
+  ],
+)

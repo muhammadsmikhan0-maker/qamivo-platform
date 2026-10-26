@@ -26,6 +26,7 @@ export function SiteHeader() {
           </a>
           <a href="/how-it-works">How it works</a>
           <a href="/about">Why Qamivo</a>
+          <a href="/mail">Qamivo Mail</a>
         </nav>
         <div className="header-actions">
           <a className="login-link" href="/login">
@@ -73,6 +74,7 @@ export function SiteFooter() {
           <a href="/jobs/new">Post a project</a>
           <a href="/account">Create your profile</a>
           <a href="/roadmap">Platform roadmap</a>
+          <a href="/mail">Qamivo Mail API</a>
         </div>
       </div>
       <div className="wrap footer-bottom">
