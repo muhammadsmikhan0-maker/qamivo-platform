@@ -95,7 +95,7 @@ function publicKeyRow(row: typeof mailApiKeys.$inferSelect) {
 }
 
 function publicDomainRow(row: typeof mailDomains.$inferSelect) {
-  let dnsRecords: unknown = []
+  let dnsRecords: unknown
   try { dnsRecords = JSON.parse(row.dnsRecords) as unknown } catch { dnsRecords = [] }
   return {
     id: row.id,
@@ -330,8 +330,13 @@ export default async (request: Request) => {
       })
       const providerDomainId = typeof providerDomain.id === 'string' ? providerDomain.id : ''
       if (!providerDomainId) throw new MailError('The provider did not return a domain ID. No domain was recorded.', 502, 'provider_invalid_response')
-      let dnsRecords = '[]'
-      try { dnsRecords = JSON.stringify(Array.isArray(providerDomain.records) ? providerDomain.records : []) } catch { dnsRecords = '[]' }
+      const dnsRecords = (() => {
+        try {
+          return JSON.stringify(Array.isArray(providerDomain.records) ? providerDomain.records : [])
+        } catch {
+          return '[]'
+        }
+      })()
       const providerStatus = typeof providerDomain.status === 'string' ? providerDomain.status : 'pending'
       const [created] = await db.insert(mailDomains).values({
         ownerId: user.id,
