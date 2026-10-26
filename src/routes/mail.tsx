@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Activity, AlertTriangle, Check, CheckCircle2, Copy, Globe, KeyRound,
+  Activity, AlertTriangle, Check, Copy, Globe, KeyRound,
   Mail, Plus, RefreshCw, Send, ShieldCheck, Terminal, Trash2,
 } from 'lucide-react'
 import { MemberGate } from '@/components/marketplace/auth'
