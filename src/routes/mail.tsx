@@ -110,7 +110,6 @@ function MailConsole() {
 
   const refresh = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true)
-    else setLoading(true)
     try {
       const result = await mailRequest<MailDashboard>('/api/mail/dashboard')
       setData(result)
@@ -212,7 +211,7 @@ function MailConsole() {
   }
 
   if (!data && error) {
-    return <div className="notice error" role="alert">{error} <button className="mail-inline-button" onClick={() => void refresh()}>Retry</button></div>
+    return <div className="notice error" role="alert">{error} <button className="mail-inline-button" onClick={() => void refresh(true)}>Retry</button></div>
   }
 
   return (
