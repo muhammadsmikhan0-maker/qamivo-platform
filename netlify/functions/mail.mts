@@ -1,6 +1,6 @@
 import { getUser } from '@netlify/identity'
 import type { Config } from '@netlify/functions'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull } from 'drizzle-orm'
 import { ZodError } from 'zod'
 import { database } from '../../db/index.js'
 import { mailApiKeys, mailDomains, mailMessages } from '../../db/schema.js'
@@ -176,6 +176,14 @@ async function deliver(ownerId: string, input: MailSendInput, idempotencyKey: st
         replayed: true,
       }
     }
+  }
+
+  const recentSends = await db.select({ id: mailMessages.id }).from(mailMessages).where(and(
+    eq(mailMessages.ownerId, ownerId),
+    gte(mailMessages.createdAt, new Date(Date.now() - 60 * 60 * 1000)),
+  )).limit(100)
+  if (recentSends.length >= 100) {
+    throw new MailError('Workspace sending limit reached. Try again after the hourly window resets.', 429, 'workspace_hourly_limit')
   }
 
   const [message] = await db.insert(mailMessages).values({
