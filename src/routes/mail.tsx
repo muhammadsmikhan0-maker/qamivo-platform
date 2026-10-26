@@ -122,7 +122,10 @@ function MailConsole() {
     }
   }, [])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [refresh])
 
   const verifiedDomains = useMemo(() => data?.domains.filter((domain) => domain.status === 'verified') || [], [data])
   const generatedCurl = [
