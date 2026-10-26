@@ -132,7 +132,7 @@ function MailConsole() {
     '  -H "Content-Type: application/json"',
     '  -H "Idempotency-Key: order-123-welcome"',
     "  -d '{\"from\":\"hello@your-verified-domain.com\",\"to\":[\"customer@example.com\"],\"subject\":\"Your order is confirmed\",\"text\":\"Thank you for your order.\"}'",
-  ].join('\\n')
+  ].join('\n')
 
   async function action<T>(run: () => Promise<T>, successMessage: string, after?: (value: T) => void) {
     setPending(true)
