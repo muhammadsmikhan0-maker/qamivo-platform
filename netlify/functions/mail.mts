@@ -32,6 +32,9 @@ function json(body: unknown, status = 200) {
 function providerKey() {
   return process.env.RESEND_API_KEY?.trim() || ''
 }
+function domainManagementKey() {
+  return process.env.RESEND_DOMAIN_API_KEY?.trim() || ''
+}
 
 async function readJson(request: Request, maxBytes = 50000): Promise<unknown> {
   const contentType = request.headers.get('content-type') || ''
@@ -56,9 +59,18 @@ function randomHex(bytes = 32) {
   return Array.from(input, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-async function providerRequest(path: string, init: RequestInit = {}): Promise<JsonObject> {
-  const key = providerKey()
-  if (!key) throw new MailError('The Resend provider is not configured. Ask the site owner to add RESEND_API_KEY in Netlify Function environment variables.', 503, 'provider_not_configured')
+async function providerRequest(
+  path: string,
+  init: RequestInit = {},
+  credential: 'RESEND_API_KEY' | 'RESEND_DOMAIN_API_KEY' = 'RESEND_API_KEY',
+): Promise<JsonObject> {
+  const key = credential === 'RESEND_DOMAIN_API_KEY' ? domainManagementKey() : providerKey()
+  if (!key) {
+    const message = credential === 'RESEND_DOMAIN_API_KEY'
+      ? 'Resend domain management is not configured. Ask the site owner to add RESEND_DOMAIN_API_KEY as a secret in Netlify Function environment variables.'
+      : 'The Resend sending provider is not configured. Ask the site owner to add RESEND_API_KEY as a secret in Netlify Function environment variables.'
+    throw new MailError(message, 503, credential === 'RESEND_DOMAIN_API_KEY' ? 'domain_provider_not_configured' : 'provider_not_configured')
+  }
   let response: Response
   try {
     const headers = new Headers(init.headers)
@@ -81,6 +93,9 @@ async function providerRequest(path: string, init: RequestInit = {}): Promise<Js
 
 function providerConfigured() {
   return Boolean(providerKey())
+}
+function domainManagementConfigured() {
+  return Boolean(domainManagementKey())
 }
 
 function publicKeyRow(row: typeof mailApiKeys.$inferSelect) {
@@ -285,7 +300,7 @@ export default async (request: Request) => {
       const accepted = emails.filter((row) => ['accepted', 'delivered', 'opened', 'clicked'].includes(row.status)).length
       const failed = emails.filter((row) => ['failed', 'bounced', 'complained'].includes(row.status)).length
       return json({
-        provider: { name: 'Resend', configured: providerConfigured() },
+        provider: { name: 'Resend', configured: providerConfigured(), domainManagementConfigured: domainManagementConfigured() },
         transactionalSenderConfigured: Boolean(process.env.QAMIVO_FROM_EMAIL?.trim()),
         stats: { activeKeys, domains: domains.length, verifiedDomains, emails: emails.length, accepted, failed },
         keys: keys.map(publicKeyRow),
@@ -327,7 +342,7 @@ export default async (request: Request) => {
       const providerDomain = await providerRequest('/domains', {
         method: 'POST',
         body: JSON.stringify({ name: domainName }),
-      })
+      }, 'RESEND_DOMAIN_API_KEY')
       const providerDomainId = typeof providerDomain.id === 'string' ? providerDomain.id : ''
       if (!providerDomainId) throw new MailError('The provider did not return a domain ID. No domain was recorded.', 502, 'provider_invalid_response')
       const dnsRecords = (() => {
@@ -358,8 +373,8 @@ export default async (request: Request) => {
       await providerRequest('/domains/' + encodeURIComponent(domain.providerDomainId) + '/verify', {
         method: 'POST',
         body: JSON.stringify({}),
-      })
-      const current = await providerRequest('/domains/' + encodeURIComponent(domain.providerDomainId), { method: 'GET', headers: {} })
+      }, 'RESEND_DOMAIN_API_KEY')
+      const current = await providerRequest('/domains/' + encodeURIComponent(domain.providerDomainId), { method: 'GET', headers: {} }, 'RESEND_DOMAIN_API_KEY')
       const status = typeof current.status === 'string' ? current.status : 'pending'
       const dnsRecords = (() => {
         try {
